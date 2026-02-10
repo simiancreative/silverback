@@ -11,13 +11,16 @@ export class AuthVerifier {
 
   constructor(credentialsPath?: string) {
     this.credentialsPath = credentialsPath ||
-      path.join(process.env.CLAUDE_AUTH_PATH || '~/.claude', '.credentials.json');
+      path.join(process.env.CLAUDE_AUTH_PATH?.replace(/^~/, process.env.HOME || '/home/sprite') || path.join(process.env.HOME || '/home/sprite', '.claude'), '.credentials.json');
   }
 
   async verify(): Promise<AuthStatus> {
     try {
       const content = await fs.readFile(this.credentialsPath, 'utf-8');
-      const creds = JSON.parse(content);
+      const raw = JSON.parse(content);
+
+      // Support both flat format and Claude Code's nested claudeAiOauth format
+      const creds = raw.claudeAiOauth || raw;
 
       if (!creds.accessToken) {
         return { valid: false, error: 'No access token found' };

@@ -34,8 +34,9 @@ export class ProcessExecutor implements Executor {
 
     const args = [
       '--print',
+      '--verbose',
       '--output-format', 'stream-json',
-      '--dangerouslySkipPermissions',
+      '--dangerously-skip-permissions',
       '--allowedTools', '*',
     ];
 
@@ -43,14 +44,14 @@ export class ProcessExecutor implements Executor {
       args.push('--resume', options.resumeSessionId);
     }
 
-    args.push(options.prompt);
+    args.push('--', options.prompt);
 
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     // Optionally skip --dangerouslySkipPermissions if env var is explicitly 'false'
     const dangerousMode = process.env.CLAUDE_DANGEROUS_MODE !== 'false';
     if (!dangerousMode) {
-      const idx = args.indexOf('--dangerouslySkipPermissions');
+      const idx = args.indexOf('--dangerously-skip-permissions');
       if (idx !== -1) args.splice(idx, 1);
     }
 

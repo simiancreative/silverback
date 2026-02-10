@@ -25,16 +25,21 @@ export class StreamParser extends EventEmitter {
       const event: ClaudeStreamEvent = JSON.parse(line);
 
       switch (event.type) {
-        case 'stream_event':
-          if (event.event?.delta?.type === 'text_delta' && event.event.delta.text) {
-            this.emit('text', event.event.delta.text);
-          } else if (event.event?.delta?.type === 'tool_use') {
-            this.emit('tool_use', {
-              name: event.event.delta.tool_name,
-              input: event.event.delta.input,
-            });
-          } else if (event.event?.delta?.type === 'tool_result') {
-            this.emit('tool_result', event.event.delta);
+        case 'assistant':
+          // Claude CLI stream-json: {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
+          if (event.message?.content) {
+            for (const block of event.message.content) {
+              if (block.type === 'text' && block.text) {
+                this.emit('text', block.text);
+              } else if (block.type === 'tool_use') {
+                this.emit('tool_use', {
+                  name: block.name,
+                  input: block.input,
+                });
+              } else if (block.type === 'tool_result') {
+                this.emit('tool_result', block);
+              }
+            }
           }
           break;
 
@@ -43,7 +48,7 @@ export class StreamParser extends EventEmitter {
           break;
 
         case 'result':
-          this.emit('result', event.result);
+          this.emit('result', event);
           break;
 
         default:

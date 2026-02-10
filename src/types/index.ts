@@ -67,25 +67,22 @@ export interface CommandOption {
 
 // Stream event types (from Claude Code)
 export interface ClaudeStreamEvent {
-  type: 'stream_event' | 'system' | 'result';
+  type: 'assistant' | 'system' | 'result';
   timestamp?: string;
-  event?: {
-    type: string;
-    delta?: {
-      type: 'text_delta' | 'tool_use' | 'tool_result';
+  // assistant event: contains message with content blocks
+  message?: {
+    content: Array<{
+      type: string;
       text?: string;
-      tool_name?: string;
+      name?: string;
       input?: unknown;
-    };
+    }>;
   };
-  result?: {
-    success: boolean;
-    session_id?: string;
-    cost?: {
-      input_tokens: number;
-      output_tokens: number;
-    };
-  };
+  // result event: top-level fields
+  session_id?: string;
+  result?: string;
+  is_error?: boolean;
+  duration_ms?: number;
 }
 
 // Queue types

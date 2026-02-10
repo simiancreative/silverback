@@ -81,7 +81,7 @@ describe('ProcessExecutor', () => {
       [
         '--print',
         '--output-format', 'stream-json',
-        '--dangerouslySkipPermissions',
+        '--dangerously-skip-permissions',
         '--allowedTools', '*',
         'test prompt'
       ],
@@ -290,7 +290,7 @@ describe('ProcessExecutor', () => {
     await executePromise;
 
     const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
-    expect(spawnArgs).not.toContain('--dangerouslySkipPermissions');
+    expect(spawnArgs).not.toContain('--dangerously-skip-permissions');
     expect(spawnArgs).toContain('--print');
     expect(spawnArgs).toContain('--allowedTools');
   });

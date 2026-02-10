@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { createApp } from './bot/app';
 import { registerMentionHandler } from './bot/events/mention';
 import { registerMessageHandler } from './bot/events/message';
@@ -178,6 +179,14 @@ async function main(): Promise<void> {
       taskLogger.info('Request completed', { threadId: request.threadId });
     } catch (error) {
       taskLogger.error('Request failed', { error, threadId: request.threadId });
+
+      // Notify user in Slack thread
+      const errMsg = error instanceof Error ? error.message : String(error);
+      await client.chat.postMessage({
+        channel: request.channelId,
+        thread_ts: request.threadId,
+        text: `:x: Error: ${errMsg}`,
+      }).catch((e) => taskLogger.error('Failed to post error to Slack', { error: e }));
 
       await failureHandler.handle(error as Error, {
         threadId: request.threadId,
