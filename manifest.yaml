@@ -1,0 +1,67 @@
+display_information:
+  name: Claude Bot
+  description: Interact with Claude Code through Slack
+  background_color: "#4A154B"
+
+features:
+  bot_user:
+    display_name: Claude Bot
+    always_online: true
+  slash_commands:
+    - command: /claude
+      description: Send a task to Claude Code
+      usage_hint: "<task description>"
+      should_escape: false
+    - command: /deploy
+      description: Squash and merge the associated PR
+      usage_hint: "[pr-number]"
+      should_escape: false
+    - command: /status
+      description: Check Claude Bot status
+      should_escape: false
+    - command: /queue
+      description: Check queue position
+      should_escape: false
+    - command: /omc-autopilot
+      description: Start autopilot mode
+      usage_hint: "<task>"
+      should_escape: false
+    - command: /omc-plan
+      description: Start planning session
+      usage_hint: "<goal>"
+      should_escape: false
+    - command: /omc-ralph
+      description: Persistent execution until complete
+      usage_hint: "<task>"
+      should_escape: false
+    - command: /omc-cancel
+      description: Cancel current Claude operation
+      should_escape: false
+
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history
+      - channels:read
+      - chat:write
+      - commands
+      - groups:history
+      - groups:read
+      - im:history
+      - im:read
+      - reactions:read
+      - users:read
+
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

@@ -1,0 +1,53 @@
+commands:
+  - name: claude
+    description: "Send a task to Claude Code"
+    usage: "/claude <task description>"
+    handler: "./handlers/claude"
+    enabled: true
+
+  - name: deploy
+    description: "Squash and merge the PR for this thread"
+    usage: "/deploy [pr-number]"
+    handler: "./handlers/deploy"
+    enabled: true
+
+  - name: status
+    description: "Check Claude Code status, auth, and queue"
+    usage: "/status"
+    handler: "./handlers/status"
+    enabled: true
+
+  - name: queue
+    description: "Check your position in the request queue"
+    usage: "/queue"
+    handler: "./handlers/queue"
+    enabled: true
+
+  # OMC Commands
+  - name: omc-autopilot
+    description: "Start autopilot mode"
+    usage: "/omc-autopilot <task>"
+    handler: "./handlers/omc/autopilot"
+    maps_to_omc: "autopilot"
+    enabled: true
+
+  - name: omc-plan
+    description: "Start planning session"
+    usage: "/omc-plan <goal>"
+    handler: "./handlers/omc/plan"
+    maps_to_omc: "plan"
+    enabled: true
+
+  - name: omc-ralph
+    description: "Persistent execution until complete"
+    usage: "/omc-ralph <task>"
+    handler: "./handlers/omc/ralph"
+    maps_to_omc: "ralph"
+    enabled: true
+
+  - name: omc-cancel
+    description: "Cancel current Claude operation"
+    usage: "/omc-cancel"
+    handler: "./handlers/omc/cancel"
+    maps_to_omc: "cancel"
+    enabled: true

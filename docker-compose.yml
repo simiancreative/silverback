@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # Docker socket proxy - SECURITY LAYER
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: 1
+      INFO: 1
+      VERSION: 1
+      EVENTS: 1
+      POST: 1
+      # DENY dangerous operations
+      SERVICES: 0
+      TASKS: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      IMAGES: 0
+      DELETE: 1
+      COMMIT: 0
+      BUILD: 0
+      PUSH: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    networks:
+      - internal
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - DOCKER_HOST=tcp://docker-proxy:2375
+      - MAX_CONCURRENT_SESSIONS=1
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config:ro
+      - ~/.claude:/mnt/claude-auth:ro
+    depends_on:
+      - redis
+      - docker-proxy
+    restart: unless-stopped
+    networks:
+      - internal
+      - external
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - internal
+
+  # Persistent volume for repo cache
+  repo-cache-init:
+    image: alpine:latest
+    command: sh -c "mkdir -p /cache/repos && chmod 755 /cache/repos"
+    volumes:
+      - repo-cache:/cache
+    restart: "no"
+
+volumes:
+  redis-data:
+  repo-cache:
+
+networks:
+  internal:
+    internal: true
+  external:
