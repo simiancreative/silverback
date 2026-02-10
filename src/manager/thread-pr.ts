@@ -7,7 +7,6 @@ interface ThreadMapping {
   threadId: string;
   channelId: string;
   claudeSessionId: string;
-  containerId: string;
   prNumber?: number;
   prUrl?: string;
   branch?: string;

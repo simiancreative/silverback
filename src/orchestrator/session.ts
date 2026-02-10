@@ -8,7 +8,7 @@ export class SessionManager {
 
   async createSession(mapping: SessionMapping): Promise<void> {
     await this.store.set(`session:${mapping.threadId}`, mapping);
-    logger.info('Session created', { threadId: mapping.threadId, containerId: mapping.containerId });
+    logger.info('Session created', { threadId: mapping.threadId });
   }
 
   async getSession(threadId: string): Promise<SessionMapping | null> {

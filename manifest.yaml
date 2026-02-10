@@ -12,9 +12,13 @@ features:
       description: Send a task to Claude Code
       usage_hint: "<task description>"
       should_escape: false
+    - command: /connect
+      description: Connect this channel to a GitHub repo
+      usage_hint: "<github.com/org/repo>"
+      should_escape: false
     - command: /deploy
       description: Squash and merge the associated PR
-      usage_hint: "[pr-number]"
+      usage_hint: "[--cleanup]"
       should_escape: false
     - command: /status
       description: Check Claude Bot status
@@ -57,6 +61,8 @@ settings:
   event_subscriptions:
     bot_events:
       - app_mention
+      - member_joined_channel
+      - member_left_channel
       - message.channels
       - message.groups
       - message.im

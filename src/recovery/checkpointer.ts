@@ -11,7 +11,7 @@ export class ContextCheckpointer {
       threadId: ctx.threadId,
       sessionId: ctx.sessionId,
       lastPrompt: ctx.prompt,
-      summaryJson: { containerId: ctx.containerId, retryCount: ctx.retryCount },
+      summaryJson: { retryCount: ctx.retryCount },
       filesModified: ctx.filesModified || [],
       createdAt: new Date(),
     };

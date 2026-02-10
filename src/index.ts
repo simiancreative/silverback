@@ -1,15 +1,15 @@
 import { createApp } from './bot/app';
 import { registerMentionHandler } from './bot/events/mention';
 import { registerMessageHandler } from './bot/events/message';
+import { registerChannelJoinHandler } from './bot/events/channel-join';
 import { CommandRegistry } from './bot/commands/registry';
 import { createClaudeHandler } from './bot/commands/claude';
 import { createDeployHandler } from './bot/commands/deploy';
 import { createStatusHandler } from './bot/commands/status';
 import { createQueueHandler } from './bot/commands/queue';
+import { createConnectHandler } from './bot/commands/connect';
 import { RequestQueue } from './queue/request-queue';
-import { ContainerPool } from './orchestrator/pool';
 import { SessionManager } from './orchestrator/session';
-import { ContainerHealthChecker } from './orchestrator/health';
 import { RedisStore } from './store/redis';
 import { ThreadPRManager } from './manager/thread-pr';
 import { AuthVerifier } from './auth/verifier';
@@ -18,11 +18,13 @@ import { StreamParser } from './stream/parser';
 import { FailureHandler } from './recovery/failure-handler';
 import { ContextCheckpointer } from './recovery/checkpointer';
 import { RepoCache } from './repos/cache';
+import { WorkspaceManager } from './workspace/manager';
+import { createExecutor } from './executor/factory';
+import { HealthChecker } from './orchestrator/health';
 import { Logger } from './logging/logger';
 import { createAuthMiddleware } from './bot/middleware/auth';
 import { RateLimiter } from './bot/middleware/rate-limit';
 import { ConfigWatcher } from './config/watcher';
-import Dockerode = require('dockerode');
 import * as path from 'path';
 
 const logger = new Logger('main');
@@ -36,18 +38,14 @@ async function main(): Promise<void> {
   // Initialize core services
   const queue = new RequestQueue({ maxConcurrent: parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10) });
   const auth = new AuthVerifier();
-  const pool = new ContainerPool({
-    minSize: parseInt(process.env.CONTAINER_POOL_MIN || '5', 10),
-    maxSize: parseInt(process.env.CONTAINER_POOL_MAX || '10', 10),
-    idleTimeout: parseInt(process.env.CONTAINER_IDLE_TIMEOUT_MS || '1800000', 10),
-    image: process.env.CONTAINER_IMAGE || 'claude-code:latest',
-  });
+  const executor = createExecutor();
   const sessionManager = new SessionManager(store);
   const threadPRManager = new ThreadPRManager(store);
   const repoCache = new RepoCache();
-  const failureHandler = new FailureHandler(pool, store);
+  const workspaceManager = new WorkspaceManager(store, repoCache);
+  const failureHandler = new FailureHandler(store);
   const checkpointer = new ContextCheckpointer(store);
-  const healthChecker = new ContainerHealthChecker(pool);
+  const healthChecker = new HealthChecker(executor);
 
   // Initialize rate limiter
   const rateLimiter = new RateLimiter(
@@ -55,24 +53,12 @@ async function main(): Promise<void> {
     parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10)
   );
 
-  // Initialize Docker client
-  const dockerHost = process.env.DOCKER_HOST || 'tcp://docker-proxy:2375';
-  const dockerUrl = new URL(dockerHost.replace('tcp://', 'http://'));
-  const docker = new Dockerode({
-    host: dockerUrl.hostname,
-    port: parseInt(dockerUrl.port || '2375', 10)
-  });
-
   // Verify auth on startup
   const authStatus = await auth.verify();
   if (!authStatus.valid) {
     logger.error('Authentication invalid on startup', { error: authStatus.error });
     logger.warn('Bot will start but Claude operations will fail until auth is fixed');
   }
-
-  // Initialize container pool
-  await pool.initialize();
-  logger.info('Container pool initialized');
 
   // Start health checker
   healthChecker.start();
@@ -83,16 +69,29 @@ async function main(): Promise<void> {
   // Register auth middleware
   app.use(createAuthMiddleware());
 
+  // Start Slack app (before getting bot user ID)
+  await app.start();
+  logger.info('Slack app started');
+
+  // Get bot user ID
+  const { getWebClient } = await import('./bot/app');
+  const client = getWebClient();
+  const authTest = await client.auth.test();
+  const botUserId = authTest.user_id as string;
+  logger.info('Bot user ID', { botUserId });
+
   // Register event handlers
   registerMentionHandler(app, queue);
   registerMessageHandler(app, queue, sessionManager);
+  registerChannelJoinHandler(app, workspaceManager, botUserId);
 
   // Register commands
   const registry = new CommandRegistry(app);
   registry.registerHandler('claude', createClaudeHandler(queue));
-  registry.registerHandler('deploy', createDeployHandler(threadPRManager));
-  registry.registerHandler('status', createStatusHandler(queue, auth, pool));
+  registry.registerHandler('deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager));
+  registry.registerHandler('status', createStatusHandler(queue, auth, executor));
   registry.registerHandler('queue', createQueueHandler(queue));
+  registry.registerHandler('connect', createConnectHandler(workspaceManager));
 
   // Load command config
   const configPath = path.resolve(process.env.COMMANDS_CONFIG || './config/commands.yaml');
@@ -112,27 +111,15 @@ async function main(): Promise<void> {
     const taskLogger = new Logger('task-processor');
     taskLogger.info('Processing request', { threadId: request.threadId, userId: request.userId });
 
-    let container;
-
     try {
       // Get or create session
       let session = await sessionManager.getSession(request.threadId);
 
-      if (session) {
-        container = await pool.getContainer(session.containerId);
-        if (!container || container.status === 'unhealthy') {
-          // Container lost, claim new one
-          const newContainer = await pool.claim(request.threadId);
-          await sessionManager.updateSession(request.threadId, { containerId: newContainer.id });
-          container = newContainer;
-        }
-      } else {
-        container = await pool.claim(request.threadId);
+      if (!session) {
         session = {
           threadId: request.threadId,
           channelId: request.channelId,
           claudeSessionId: '',
-          containerId: container.id,
           repository: '',
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -140,43 +127,42 @@ async function main(): Promise<void> {
         await sessionManager.createSession(session);
       }
 
+      // Get or create workspace for this thread
+      const workspacePath = await workspaceManager.getOrCreateWorkspace(request.threadId, request.channelId);
+      if (workspacePath && !session.workspacePath) {
+        await sessionManager.updateSession(request.threadId, { workspacePath });
+      }
+
       // Create stream handler for Slack updates
-      const { getWebClient } = await import('./bot/app');
-      const client = getWebClient();
       const streamHandler = await StreamHandler.create(client, request.channelId, request.threadId);
 
-      // Execute Claude in container (via Docker exec)
+      // Set up stream parser
       const parser = new StreamParser();
       parser.on('text', (text: string) => streamHandler.onData(text));
 
-      // Docker exec implementation
-      const dockerContainer = docker.getContainer(container.id);
-
-      // Build exec command
-      const execCmd = ['claude', '--print', '--output-format', 'stream-json', '--allowedTools', '*'];
-      if (session.claudeSessionId) {
-        execCmd.push('--resume', session.claudeSessionId);
-      }
-      execCmd.push(request.prompt);
-
-      const exec = await dockerContainer.exec({
-        Cmd: execCmd,
-        AttachStdout: true,
-        AttachStderr: true,
+      // Wire claudeSessionId extraction from result event (fixes pre-existing bug)
+      parser.on('result', (data: { success?: boolean; session_id?: string }) => {
+        if (data?.session_id) {
+          sessionManager.updateSession(request.threadId, {
+            claudeSessionId: data.session_id,
+          }).catch((err) => {
+            taskLogger.error('Failed to persist claudeSessionId', { error: err });
+          });
+        }
       });
 
-      const execStream = await exec.start({});
+      // Execute Claude via executor
+      await executor.execute(
+        {
+          prompt: request.prompt,
+          resumeSessionId: session.claudeSessionId || undefined,
+          cwd: workspacePath || undefined,
+        },
+        (chunk: string) => parser.processChunk(chunk),
+      );
 
-      await new Promise<void>((resolve, reject) => {
-        execStream.on('data', (chunk: Buffer) => {
-          parser.processChunk(chunk.toString());
-        });
-        execStream.on('end', () => {
-          parser.flush();
-          resolve();
-        });
-        execStream.on('error', reject);
-      });
+      // IMPORTANT: flush parser after execute -- result event may be buffered
+      parser.flush();
 
       await streamHandler.complete();
 
@@ -184,7 +170,6 @@ async function main(): Promise<void> {
       await checkpointer.checkpoint({
         threadId: request.threadId,
         sessionId: session.claudeSessionId,
-        containerId: container.id,
         channelId: request.channelId,
         prompt: request.prompt,
         retryCount: 0,
@@ -198,23 +183,15 @@ async function main(): Promise<void> {
         threadId: request.threadId,
         channelId: request.channelId,
         sessionId: '',
-        containerId: '',
         prompt: request.prompt,
         retryCount: 0,
       });
-    } finally {
-      // Release container back to pool
-      if (container) {
-        await pool.release(container.id);
-      }
     }
   });
 
   // Start queue processing
   queue.startProcessing();
 
-  // Start Slack app
-  await app.start();
   logger.info('Slack Claude Bot is running!');
 
   // Graceful shutdown handler
@@ -222,7 +199,7 @@ async function main(): Promise<void> {
     logger.info('Shutting down...');
     queue.stopProcessing();
     healthChecker.stop();
-    await pool.shutdown();
+    await executor.shutdown();
     await store.disconnect();
     process.exit(0);
   };
@@ -234,8 +211,6 @@ async function main(): Promise<void> {
   setInterval(async () => {
     const status = await auth.verify();
     if (!status.valid) {
-      const { getWebClient } = await import('./bot/app');
-      const client = getWebClient();
       await auth.notifyOnExpiry(client, process.env.ADMIN_CHANNEL || '');
     }
   }, 30 * 60 * 1000);

@@ -1,5 +1,4 @@
 import { FailureType, RecoveryResult, TaskContext } from '../types';
-import { ContainerPool } from '../orchestrator/pool';
 import { KeyValueStore } from '../types';
 import { Logger } from '../logging/logger';
 
@@ -14,7 +13,6 @@ export class FailureHandler {
   private readonly BACKOFF_BASE_MS = 1000;
 
   constructor(
-    private pool: ContainerPool,
     private store: KeyValueStore
   ) {}
 
@@ -41,11 +39,9 @@ export class FailureHandler {
       const delay = this.BACKOFF_BASE_MS * Math.pow(2, ctx.retryCount);
       await sleep(delay);
 
-      const newContainer = await this.pool.acquireFresh();
-      ctx.containerId = newContainer.id;
       ctx.retryCount++;
 
-      return { success: true, action: 'retried', message: `Retrying in new container (attempt ${ctx.retryCount})` };
+      return { success: true, action: 'retried', message: `Retrying (attempt ${ctx.retryCount})` };
     }
 
     return { success: false, action: 'aborted', message: 'Max retries exceeded for transient error' };

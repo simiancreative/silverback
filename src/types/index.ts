@@ -15,29 +15,6 @@ export interface SlackThread {
   messages: SlackMessage[];
 }
 
-// Container-related types
-export interface ContainerConfig {
-  image: string;
-  env: Record<string, string>;
-  volumes: VolumeMount[];
-  labels: Record<string, string>;
-}
-
-export interface VolumeMount {
-  hostPath: string;
-  containerPath: string;
-  mode: 'ro' | 'rw';
-}
-
-export interface ContainerState {
-  id: string;
-  status: 'warming' | 'idle' | 'busy' | 'stopping' | 'unhealthy';
-  currentTask?: TaskInfo;
-  sessionId?: string;
-  startedAt: Date;
-  claimedAt?: Date;
-  lastHealthCheck: Date;
-}
 
 // Task-related types
 export interface TaskInfo {
@@ -59,7 +36,7 @@ export interface SessionMapping {
   threadId: string;
   channelId: string;
   claudeSessionId: string;
-  containerId: string;
+  workspacePath?: string;
   branch?: string;
   prNumber?: number;
   prUrl?: string;
@@ -181,7 +158,6 @@ export interface TaskContext {
   threadId: string;
   channelId: string;
   sessionId: string;
-  containerId: string;
   prompt: string;
   retryCount: number;
   filesModified?: string[];
@@ -190,19 +166,3 @@ export interface TaskContext {
 // RecoveryContext is an alias for TaskContext
 export type RecoveryContext = TaskContext;
 
-// Pool config
-export interface PoolConfig {
-  minSize: number;
-  maxSize: number;
-  idleTimeout: number;
-  image: string;
-}
-
-// Container info
-export interface ContainerInfo {
-  id: string;
-  status: 'warming' | 'idle' | 'busy' | 'unhealthy';
-  currentSession?: string;
-  lastActivity: Date;
-  claimedAt?: Date;
-}

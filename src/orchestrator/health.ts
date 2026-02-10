@@ -1,14 +1,14 @@
-import { ContainerPool } from './pool';
+import { Executor } from '../executor/interface';
 import { Logger } from '../logging/logger';
 
 const logger = new Logger('health-checker');
 
-export class ContainerHealthChecker {
+export class HealthChecker {
   private interval: ReturnType<typeof setInterval> | null = null;
   private readonly checkIntervalMs: number;
 
   constructor(
-    private pool: ContainerPool,
+    private executor: Executor,
     checkIntervalMs = 60000
   ) {
     this.checkIntervalMs = checkIntervalMs;
@@ -30,15 +30,12 @@ export class ContainerHealthChecker {
   }
 
   private async checkHealth(): Promise<void> {
-    const status = this.pool.getPoolStatus();
-    logger.info('Pool health check', status);
+    const healthy = await this.executor.healthCheck();
 
-    if (status.unhealthy > 0) {
-      logger.warn('Unhealthy containers detected', { count: status.unhealthy });
-    }
-
-    if (status.idle === 0 && status.busy === status.total) {
-      logger.warn('All containers busy - pool may need scaling');
+    if (healthy) {
+      logger.info('Executor health check passed');
+    } else {
+      logger.error('Executor health check FAILED -- claude CLI or credentials may be unavailable');
     }
   }
 }
