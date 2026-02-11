@@ -29,6 +29,7 @@ export class FailureHandler {
         return this.handleSessionCorrupt(context);
       case FailureType.AUTH_EXPIRED:
         return this.handleAuthExpired(context);
+      case FailureType.UNKNOWN:
       default:
         return this.handleUnknown(error, context);
     }
@@ -89,6 +90,6 @@ export class FailureHandler {
       return FailureType.CLAUDE_ERROR;
     }
 
-    return FailureType.TRANSIENT;
+    return FailureType.UNKNOWN;
   }
 }

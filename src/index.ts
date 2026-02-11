@@ -141,36 +141,43 @@ async function main(): Promise<void> {
       const parser = new StreamParser();
       parser.on('text', (text: string) => streamHandler.onData(text));
 
-      // Wire claudeSessionId extraction from result event (fixes pre-existing bug)
+      // Wire claudeSessionId extraction from result event
+      let extractedSessionId = session.claudeSessionId || '';
       parser.on('result', (data: { success?: boolean; session_id?: string }) => {
         if (data?.session_id) {
-          sessionManager.updateSession(request.threadId, {
-            claudeSessionId: data.session_id,
-          }).catch((err) => {
-            taskLogger.error('Failed to persist claudeSessionId', { error: err });
-          });
+          extractedSessionId = data.session_id;
         }
       });
 
-      // Execute Claude via executor
-      await executor.execute(
-        {
-          prompt: request.prompt,
-          resumeSessionId: session.claudeSessionId || undefined,
-          cwd: workspacePath || undefined,
-        },
-        (chunk: string) => parser.processChunk(chunk),
-      );
+      try {
+        // Execute Claude via executor
+        await executor.execute(
+          {
+            prompt: request.prompt,
+            resumeSessionId: session.claudeSessionId || undefined,
+            cwd: workspacePath || undefined,
+          },
+          (chunk: string) => parser.processChunk(chunk),
+        );
 
-      // IMPORTANT: flush parser after execute -- result event may be buffered
-      parser.flush();
+        // IMPORTANT: flush parser after execute -- result event may be buffered
+        parser.flush();
+      } finally {
+        // Always stop the stream handler interval, even on error
+        await streamHandler.complete();
+      }
 
-      await streamHandler.complete();
+      // Persist extracted sessionId
+      if (extractedSessionId && extractedSessionId !== session.claudeSessionId) {
+        await sessionManager.updateSession(request.threadId, {
+          claudeSessionId: extractedSessionId,
+        });
+      }
 
-      // Checkpoint context
+      // Checkpoint context with the actual sessionId from this execution
       await checkpointer.checkpoint({
         threadId: request.threadId,
-        sessionId: session.claudeSessionId,
+        sessionId: extractedSessionId,
         channelId: request.channelId,
         prompt: request.prompt,
         retryCount: 0,
@@ -188,13 +195,24 @@ async function main(): Promise<void> {
         text: `:x: Error: ${errMsg}`,
       }).catch((e) => taskLogger.error('Failed to post error to Slack', { error: e }));
 
-      await failureHandler.handle(error as Error, {
+      const result = await failureHandler.handle(error as Error, {
         threadId: request.threadId,
         channelId: request.channelId,
         sessionId: '',
         prompt: request.prompt,
         retryCount: 0,
       });
+
+      // Re-enqueue if recovery says to retry
+      if (result.success && result.action === 'retried') {
+        taskLogger.info('Re-enqueuing request after transient failure', { threadId: request.threadId });
+        await queue.enqueue({
+          threadId: request.threadId,
+          channelId: request.channelId,
+          userId: request.userId,
+          prompt: request.prompt,
+        });
+      }
     }
   });
 
