@@ -28,6 +28,7 @@ export class StreamParser extends EventEmitter {
         case 'assistant':
           // Claude CLI stream-json: {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
           if (event.message?.content) {
+            this.emit('message_start');
             for (const block of event.message.content) {
               if (block.type === 'text' && block.text) {
                 this.emit('text', block.text);

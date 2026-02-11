@@ -4,21 +4,17 @@ import { Logger } from '../logging/logger';
 const logger = new Logger('stream-handler');
 
 export class StreamHandler {
-  private buffer = '';
-  private fullText = '';
+  private currentText = '';
+  private currentMessageTs: string | null = null;
   private updateInterval: ReturnType<typeof setInterval> | null = null;
-  private slackMessageTs: string;
   private dirty = false;
-  private updateCount = 0;
-  private readonly MAX_MESSAGE_LENGTH = 39000; // Slack limit ~40k, leave margin
+  private messageCount = 0;
 
   private constructor(
     private slack: WebClient,
     private channel: string,
     private threadTs: string,
-    messageTs: string
   ) {
-    this.slackMessageTs = messageTs;
     this.updateInterval = setInterval(() => this.flush(), 100);
   }
 
@@ -32,13 +28,28 @@ export class StreamHandler {
       thread_ts: threadTs,
       text: '_Claude is thinking..._',
     });
+    const handler = new StreamHandler(slack, channel, threadTs);
+    handler.currentMessageTs = result.ts!;
+    return handler;
+  }
 
-    return new StreamHandler(slack, channel, threadTs, result.ts!);
+  /**
+   * Called when a new assistant message starts. Finalizes the current message
+   * and prepares to post a new one.
+   */
+  async onMessageStart(): Promise<void> {
+    // Finalize previous message if it has content
+    if (this.currentMessageTs && this.currentText.trim()) {
+      this.dirty = true;
+      await this.flush();
+    }
+    // Reset for the new message
+    this.currentText = '';
+    this.currentMessageTs = null;
   }
 
   onData(text: string): void {
-    this.buffer += text;
-    this.fullText += text;
+    this.currentText += text;
     this.dirty = true;
   }
 
@@ -46,25 +57,31 @@ export class StreamHandler {
     if (!this.dirty) return;
     this.dirty = false;
 
+    const displayText = this.currentText.trim();
+    if (!displayText) return;
+
     try {
-      let displayText = this.fullText;
-
-      // Truncate if too long for Slack
-      if (displayText.length > this.MAX_MESSAGE_LENGTH) {
-        displayText = '...(truncated)\n\n' + displayText.slice(-this.MAX_MESSAGE_LENGTH);
+      if (!this.currentMessageTs) {
+        // Post a new message in the thread
+        const result = await this.slack.chat.postMessage({
+          channel: this.channel,
+          thread_ts: this.threadTs,
+          text: displayText,
+        });
+        this.currentMessageTs = result.ts!;
+        this.messageCount++;
+      } else {
+        // Update the current message with streaming content
+        await this.slack.chat.update({
+          channel: this.channel,
+          ts: this.currentMessageTs,
+          text: displayText,
+        });
       }
-
-      await this.slack.chat.update({
-        channel: this.channel,
-        ts: this.slackMessageTs,
-        text: displayText || '_Processing..._',
-      });
-
-      this.updateCount++;
     } catch (error: any) {
       if (error?.data?.error === 'ratelimited') {
         logger.warn('Slack rate limited, will retry on next flush');
-        this.dirty = true; // Retry on next interval
+        this.dirty = true;
       } else {
         logger.error('Failed to update Slack message', { error: error?.message });
       }
@@ -81,13 +98,6 @@ export class StreamHandler {
     this.dirty = true;
     await this.flush();
 
-    logger.info('Stream complete', {
-      totalLength: this.fullText.length,
-      updates: this.updateCount
-    });
-  }
-
-  getFullText(): string {
-    return this.fullText;
+    logger.info('Stream complete', { messages: this.messageCount });
   }
 }

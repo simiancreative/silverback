@@ -9,7 +9,7 @@ import { Logger } from '../logging/logger';
 
 const logger = new Logger('process-executor');
 
-const DEFAULT_TIMEOUT_MS = parseInt(process.env.EXECUTOR_TIMEOUT_MS || '600000', 10); // 10 min
+const DEFAULT_TIMEOUT_MS = parseInt(process.env.EXECUTOR_TIMEOUT_MS || '0', 10); // 0 = no timeout
 const SIGKILL_GRACE_MS = 5000;
 
 export class ProcessExecutor implements Executor {
@@ -32,12 +32,14 @@ export class ProcessExecutor implements Executor {
       this.activeTmpDir = tmpDir;
     }
 
+    const model = process.env.CLAUDE_MODEL || 'sonnet';
+
     const args = [
       '--print',
       '--verbose',
       '--output-format', 'stream-json',
       '--dangerously-skip-permissions',
-      '--allowedTools', '*',
+      '--model', model,
     ];
 
     if (options.resumeSessionId) {
@@ -131,11 +133,14 @@ export class ProcessExecutor implements Executor {
   }
 
   async healthCheck(): Promise<boolean> {
-    // 1. Check credentials file exists
-    const credPath = join(process.env.HOME || '/home/sprite', '.claude', '.credentials.json');
-    if (!existsSync(credPath)) {
-      logger.error('Claude credentials file not found', { path: credPath });
-      return false;
+    // 1. Check auth is available (env token or credentials file)
+    const hasEnvToken = !!(process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY);
+    if (!hasEnvToken) {
+      const credPath = join(process.env.HOME || '/root', '.claude', '.credentials.json');
+      if (!existsSync(credPath)) {
+        logger.error('No Claude auth found (no env token, no credentials file)', { path: credPath });
+        return false;
+      }
     }
 
     // 2. Check claude binary works

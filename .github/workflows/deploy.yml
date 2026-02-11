@@ -1,0 +1,36 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Registry
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login https://registry.loomis.io -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin
+
+      - name: Generate version tag
+        id: version
+        run: |
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "tag=${SHA}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            registry.loomis.io/silverback:${{ steps.version.outputs.tag }}
+            registry.loomis.io/silverback:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

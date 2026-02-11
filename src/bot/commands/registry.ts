@@ -3,15 +3,19 @@ import * as fs from 'fs/promises';
 import * as yaml from 'js-yaml';
 import * as path from 'path';
 import { CommandDefinition } from '../../types';
+import { WorkspaceManager } from '../../workspace/manager';
 import { Logger } from '../../logging/logger';
 
 const logger = new Logger('command-registry');
+
+// Commands that don't require a channel to be connected to a repo
+const CONNECTION_EXEMPT = new Set(['sb-connect', 'sb-status', 'sb-queue', 'sb-cancel']);
 
 export class CommandRegistry {
   private commands: Map<string, CommandDefinition> = new Map();
   private handlers: Map<string, (command: any, client: any) => Promise<void>> = new Map();
 
-  constructor(private app: App) {}
+  constructor(private app: App, private workspaceManager?: WorkspaceManager) {}
 
   async loadFromConfig(configPath: string): Promise<void> {
     try {
@@ -33,6 +37,19 @@ export class CommandRegistry {
   private registerCommand(cmd: CommandDefinition): void {
     this.app.command(`/${cmd.name}`, async ({ command, ack, client }) => {
       await ack();
+
+      // Check channel connection for non-exempt commands
+      if (this.workspaceManager && !CONNECTION_EXEMPT.has(cmd.name)) {
+        const mapping = await this.workspaceManager.getChannelRepo(command.channel_id);
+        if (!mapping) {
+          await client.chat.postEphemeral({
+            channel: command.channel_id,
+            user: command.user_id,
+            text: `:link: This channel isn't connected to a repo yet. Run \`/sb-connect github.com/org/repo\` first.`,
+          });
+          return;
+        }
+      }
 
       const handler = this.getHandler(cmd);
       if (handler) {

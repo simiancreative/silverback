@@ -12,7 +12,7 @@ export function createClaudeHandler(queue: RequestQueue) {
       await client.chat.postEphemeral({
         channel: command.channel_id,
         user: command.user_id,
-        text: 'Usage: /claude <task description>',
+        text: 'Usage: /sb-claude <task description>',
       });
       return;
     }

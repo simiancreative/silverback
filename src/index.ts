@@ -9,9 +9,12 @@ import { createDeployHandler } from './bot/commands/deploy';
 import { createStatusHandler } from './bot/commands/status';
 import { createQueueHandler } from './bot/commands/queue';
 import { createConnectHandler } from './bot/commands/connect';
+import { createOmcHandler, createOmcCancelHandler } from './bot/commands/omc';
+
 import { RequestQueue } from './queue/request-queue';
 import { SessionManager } from './orchestrator/session';
 import { RedisStore } from './store/redis';
+import { MemoryStore } from './store/memory';
 import { ThreadPRManager } from './manager/thread-pr';
 import { AuthVerifier } from './auth/verifier';
 import { StreamHandler } from './stream/handler';
@@ -34,7 +37,7 @@ async function main(): Promise<void> {
   logger.info('Starting Slack Claude Bot...');
 
   // Initialize store
-  const store = new RedisStore(process.env.REDIS_URL || 'redis://localhost:6379');
+  const store = process.env.REDIS_URL ? new RedisStore(process.env.REDIS_URL) : new MemoryStore();
 
   // Initialize core services
   const queue = new RequestQueue({ maxConcurrent: parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10) });
@@ -87,12 +90,22 @@ async function main(): Promise<void> {
   registerChannelJoinHandler(app, workspaceManager, botUserId);
 
   // Register commands
-  const registry = new CommandRegistry(app);
-  registry.registerHandler('claude', createClaudeHandler(queue));
-  registry.registerHandler('deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager));
-  registry.registerHandler('status', createStatusHandler(queue, auth, executor));
-  registry.registerHandler('queue', createQueueHandler(queue));
-  registry.registerHandler('connect', createConnectHandler(workspaceManager));
+  const registry = new CommandRegistry(app, workspaceManager);
+  registry.registerHandler('sb-claude', createClaudeHandler(queue));
+  registry.registerHandler('sb-deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager));
+  registry.registerHandler('sb-status', createStatusHandler(queue, auth, executor, workspaceManager));
+  registry.registerHandler('sb-queue', createQueueHandler(queue));
+  registry.registerHandler('sb-connect', createConnectHandler(workspaceManager));
+  // OMC mode handlers
+  registry.registerHandler('sb-autopilot', createOmcHandler(queue, 'sb-autopilot', 'autopilot'));
+  registry.registerHandler('sb-ralph', createOmcHandler(queue, 'sb-ralph', 'ralph'));
+  registry.registerHandler('sb-plan', createOmcHandler(queue, 'sb-plan', 'plan'));
+  registry.registerHandler('sb-ralplan', createOmcHandler(queue, 'sb-ralplan', 'ralplan'));
+  registry.registerHandler('sb-ultrawork', createOmcHandler(queue, 'sb-ultrawork', 'ulw'));
+  registry.registerHandler('sb-ecomode', createOmcHandler(queue, 'sb-ecomode', 'eco'));
+  registry.registerHandler('sb-team', createOmcHandler(queue, 'sb-team', 'team'));
+  registry.registerHandler('sb-cancel', createOmcCancelHandler(queue));
+
 
   // Load command config
   const configPath = path.resolve(process.env.COMMANDS_CONFIG || './config/commands.yaml');
@@ -139,6 +152,7 @@ async function main(): Promise<void> {
 
       // Set up stream parser
       const parser = new StreamParser();
+      parser.on('message_start', () => streamHandler.onMessageStart());
       parser.on('text', (text: string) => streamHandler.onData(text));
 
       // Wire claudeSessionId extraction from result event

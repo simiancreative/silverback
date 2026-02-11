@@ -10,11 +10,20 @@ export class AuthVerifier {
   private readonly credentialsPath: string;
 
   constructor(credentialsPath?: string) {
+    const home = process.env.HOME || '/root';
     this.credentialsPath = credentialsPath ||
-      path.join(process.env.CLAUDE_AUTH_PATH?.replace(/^~/, process.env.HOME || '/home/sprite') || path.join(process.env.HOME || '/home/sprite', '.claude'), '.credentials.json');
+      path.join(process.env.CLAUDE_AUTH_PATH?.replace(/^~/, home) || path.join(home, '.claude'), '.credentials.json');
   }
 
   async verify(): Promise<AuthStatus> {
+    // Check env-based auth first (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY)
+    if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+      return { valid: true };
+    }
+    if (process.env.ANTHROPIC_API_KEY) {
+      return { valid: true };
+    }
+
     try {
       const content = await fs.readFile(this.credentialsPath, 'utf-8');
       const raw = JSON.parse(content);

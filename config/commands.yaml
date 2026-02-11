@@ -1,53 +1,87 @@
 commands:
-  - name: claude
+  - name: sb-claude
     description: "Send a task to Claude Code"
-    usage: "/claude <task description>"
+    usage: "/sb-claude <task description>"
     handler: "./handlers/claude"
     enabled: true
 
-  - name: deploy
+  - name: sb-deploy
     description: "Squash and merge the PR for this thread"
-    usage: "/deploy [pr-number]"
+    usage: "/sb-deploy [pr-number]"
     handler: "./handlers/deploy"
     enabled: true
 
-  - name: status
+  - name: sb-status
     description: "Check Claude Code status, auth, and queue"
-    usage: "/status"
+    usage: "/sb-status"
     handler: "./handlers/status"
     enabled: true
 
-  - name: queue
+  - name: sb-queue
     description: "Check your position in the request queue"
-    usage: "/queue"
+    usage: "/sb-queue"
     handler: "./handlers/queue"
     enabled: true
 
+  - name: sb-connect
+    description: "clones a repo for the current channel"
+    usage: "/sb-connect [repo url]"
+    handler: "./handlers/connect"
+    enabled: true
+
   # OMC Commands
-  - name: omc-autopilot
+  - name: sb-autopilot
     description: "Start autopilot mode"
-    usage: "/omc-autopilot <task>"
+    usage: "/sb-autopilot <task>"
     handler: "./handlers/omc/autopilot"
     maps_to_omc: "autopilot"
     enabled: true
 
-  - name: omc-plan
+  - name: sb-plan
     description: "Start planning session"
-    usage: "/omc-plan <goal>"
+    usage: "/sb-plan <goal>"
     handler: "./handlers/omc/plan"
     maps_to_omc: "plan"
     enabled: true
 
-  - name: omc-ralph
+  - name: sb-ralph
     description: "Persistent execution until complete"
-    usage: "/omc-ralph <task>"
+    usage: "/sb-ralph <task>"
     handler: "./handlers/omc/ralph"
     maps_to_omc: "ralph"
     enabled: true
 
-  - name: omc-cancel
+  - name: sb-cancel
     description: "Cancel current Claude operation"
-    usage: "/omc-cancel"
+    usage: "/sb-cancel"
     handler: "./handlers/omc/cancel"
     maps_to_omc: "cancel"
+    enabled: true
+
+  - name: sb-ralplan
+    description: "Iterative planning with consensus"
+    usage: "/sb-ralplan <goal>"
+    handler: "./handlers/omc/ralplan"
+    maps_to_omc: "ralplan"
+    enabled: true
+
+  - name: sb-ultrawork
+    description: "Maximum parallel execution"
+    usage: "/sb-ultrawork <task>"
+    handler: "./handlers/omc/ultrawork"
+    maps_to_omc: "ulw"
+    enabled: true
+
+  - name: sb-ecomode
+    description: "Token-efficient parallel execution"
+    usage: "/sb-ecomode <task>"
+    handler: "./handlers/omc/ecomode"
+    maps_to_omc: "eco"
+    enabled: true
+
+  - name: sb-team
+    description: "Coordinated agent team execution"
+    usage: "/sb-team <task>"
+    handler: "./handlers/omc/team"
+    maps_to_omc: "team"
     enabled: true

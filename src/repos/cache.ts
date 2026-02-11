@@ -7,16 +7,22 @@ import { Logger } from '../logging/logger';
 const execFileAsync = promisify(execFile);
 const logger = new Logger('repo-cache');
 
+function repoUrl(org: string, repo: string): string {
+  const token = process.env.GITHUB_TOKEN;
+  if (token) {
+    return `https://x-access-token:${token}@github.com/${org}/${repo}.git`;
+  }
+  return repoUrl(org, repo);
+}
+
 export class RepoCache {
   private readonly cacheBase: string;
   private readonly workspaceBase: string;
 
-  constructor(
-    cacheBase = '/home/sprite/repos',
-    workspaceBase = '/home/sprite/workspaces'
-  ) {
-    this.cacheBase = cacheBase;
-    this.workspaceBase = workspaceBase;
+  constructor(cacheBase?: string, workspaceBase?: string) {
+    const dataDir = process.env.DATA_DIR || path.join(process.cwd(), '.data');
+    this.cacheBase = cacheBase || path.join(dataDir, 'repos');
+    this.workspaceBase = workspaceBase || path.join(dataDir, 'workspaces');
   }
 
   async ensureCached(org: string, repo: string): Promise<string> {
@@ -36,7 +42,7 @@ export class RepoCache {
     } catch {
       // First time: bare clone
       await fs.mkdir(path.dirname(cachePath), { recursive: true });
-      await execFileAsync('git', ['clone', '--bare', `https://github.com/${org}/${repo}.git`, cachePath]);
+      await execFileAsync('git', ['clone', '--bare', repoUrl(org, repo), cachePath]);
       logger.info('Repo cache created', { org, repo });
     }
 
@@ -63,7 +69,7 @@ export class RepoCache {
     }
 
     await fs.mkdir(this.workspaceBase, { recursive: true });
-    await execFileAsync('git', ['clone', '--reference', cachePath, `https://github.com/${org}/${repo}.git`, workspacePath]);
+    await execFileAsync('git', ['clone', '--reference', cachePath, repoUrl(org, repo), workspacePath]);
 
     if (branch) {
       await execFileAsync('git', ['-C', workspacePath, 'checkout', '-b', branch]);

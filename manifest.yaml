@@ -1,62 +1,10 @@
+_metadata:
+  major_version: 2
+  minor_version: 1
 display_information:
-  name: Claude Bot
-  description: Interact with Claude Code through Slack
-  background_color: "#4A154B"
-
-features:
-  bot_user:
-    display_name: Claude Bot
-    always_online: true
-  slash_commands:
-    - command: /claude
-      description: Send a task to Claude Code
-      usage_hint: "<task description>"
-      should_escape: false
-    - command: /connect
-      description: Connect this channel to a GitHub repo
-      usage_hint: "<github.com/org/repo>"
-      should_escape: false
-    - command: /deploy
-      description: Squash and merge the associated PR
-      usage_hint: "[--cleanup]"
-      should_escape: false
-    - command: /status
-      description: Check Claude Bot status
-      should_escape: false
-    - command: /queue
-      description: Check queue position
-      should_escape: false
-    - command: /omc-autopilot
-      description: Start autopilot mode
-      usage_hint: "<task>"
-      should_escape: false
-    - command: /omc-plan
-      description: Start planning session
-      usage_hint: "<goal>"
-      should_escape: false
-    - command: /omc-ralph
-      description: Persistent execution until complete
-      usage_hint: "<task>"
-      should_escape: false
-    - command: /omc-cancel
-      description: Cancel current Claude operation
-      should_escape: false
-
-oauth_config:
-  scopes:
-    bot:
-      - app_mentions:read
-      - channels:history
-      - channels:read
-      - chat:write
-      - commands
-      - groups:history
-      - groups:read
-      - im:history
-      - im:read
-      - reactions:read
-      - users:read
-
+  name: SilverBack
+  description: General actions done by apes
+  background_color: "#28292b"
 settings:
   event_subscriptions:
     bot_events:
@@ -71,3 +19,73 @@ settings:
   org_deploy_enabled: false
   socket_mode_enabled: true
   token_rotation_enabled: false
+features:
+  bot_user:
+    display_name: SilverBack
+    always_online: true
+  slash_commands:
+    - command: /sb-connect
+      description: clones a repo for the current channel
+      usage_hint: "[repo url]"
+      should_escape: false
+    - command: /sb-claude
+      description: Send a task to Claude Code
+      usage_hint: "<task description>"
+      should_escape: false
+    - command: /sb-deploy
+      description: Squash and merge the associated PR
+      usage_hint: "[--cleanup]"
+      should_escape: false
+    - command: /sb-status
+      description: Check SilverBack status
+      should_escape: false
+    - command: /sb-queue
+      description: Check queue position
+      should_escape: false
+    - command: /sb-autopilot
+      description: Start autopilot mode
+      usage_hint: "<task>"
+      should_escape: false
+    - command: /sb-plan
+      description: Start planning session
+      usage_hint: "<goal>"
+      should_escape: false
+    - command: /sb-ralph
+      description: Persistent execution until complete
+      usage_hint: "<task>"
+      should_escape: false
+    - command: /sb-cancel
+      description: Cancel current Claude operation
+      should_escape: false
+    - command: /sb-ralplan
+      description: Iterative planning with consensus
+      usage_hint: "<goal>"
+      should_escape: false
+    - command: /sb-ultrawork
+      description: Maximum parallel execution
+      usage_hint: "<task>"
+      should_escape: false
+    - command: /sb-ecomode
+      description: Token-efficient parallel execution
+      usage_hint: "<task>"
+      should_escape: false
+    - command: /sb-team
+      description: Coordinated agent team execution
+      usage_hint: "<task>"
+      should_escape: false
+oauth_config:
+  scopes:
+    user:
+      - chat:write
+    bot:
+      - channels:read
+      - chat:write
+      - commands
+      - groups:read
+      - incoming-webhook
+      - users:read
+      - app_mentions:read
+      - channels:history
+      - mpim:read
+      - groups:history
+      - im:history
