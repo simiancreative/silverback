@@ -80,10 +80,11 @@ describe('ProcessExecutor', () => {
       'claude',
       [
         '--print',
+        '--verbose',
         '--output-format', 'stream-json',
         '--dangerously-skip-permissions',
         '--allowedTools', '*',
-        'test prompt'
+        '--', 'test prompt'
       ],
       expect.objectContaining({
         cwd: '/tmp/claude-work-test',

@@ -143,6 +143,7 @@ export enum FailureType {
   CLAUDE_ERROR = 'claude_error',
   SESSION_CORRUPT = 'session_corrupt',
   AUTH_EXPIRED = 'auth_expired',
+  UNKNOWN = 'unknown',
 }
 
 export interface RecoveryResult {

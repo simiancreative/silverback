@@ -15,9 +15,12 @@ export function registerMessageHandler(app: App, queue: RequestQueue, sessionMan
     if ('subtype' in event && event.subtype) return;
 
     const threadTs = event.thread_ts;
-    const text = 'text' in event ? event.text || '' : '';
+    const text = 'text' in event ? (event.text || '').trim() : '';
     const userId = 'user' in event ? event.user || '' : '';
     const channelId = event.channel;
+
+    // Ignore empty messages
+    if (!text) return;
 
     // Check if this thread has an active session
     const session = await sessionManager.getSession(threadTs);
