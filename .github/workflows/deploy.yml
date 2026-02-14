@@ -21,8 +21,8 @@ jobs:
       - name: Generate version tag
         id: version
         run: |
-          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          echo "tag=${SHA}" >> $GITHUB_OUTPUT
+          VERSION="0.1.${{ github.run_number }}"
+          echo "tag=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -31,6 +31,5 @@ jobs:
           push: true
           tags: |
             registry.loomis.io/silverback:${{ steps.version.outputs.tag }}
-            registry.loomis.io/silverback:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
