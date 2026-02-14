@@ -25,6 +25,8 @@ export class FailureHandler {
         return this.handleTransient(error, context);
       case FailureType.CLAUDE_ERROR:
         return this.handleClaudeError(error, context);
+      case FailureType.IMAGE_ERROR:
+        return this.handleImageError(context);
       case FailureType.SESSION_CORRUPT:
         return this.handleSessionCorrupt(context);
       case FailureType.AUTH_EXPIRED:
@@ -60,6 +62,11 @@ export class FailureHandler {
     return { success: false, action: 'escalated', message: 'Claude error persisted after retries' };
   }
 
+  private async handleImageError(ctx: TaskContext): Promise<RecoveryResult> {
+    logger.info('Image processing error detected, will retry without images', { threadId: ctx.threadId });
+    return { success: true, action: 'retried_without_images', message: 'Image processing failed, retrying without images' };
+  }
+
   private async handleSessionCorrupt(ctx: TaskContext): Promise<RecoveryResult> {
     await this.store.delete(`session:${ctx.threadId}`);
     return { success: false, action: 'escalated', message: 'Session corrupt, cleared mapping' };
@@ -76,6 +83,13 @@ export class FailureHandler {
 
   private classifyError(error: Error): FailureType {
     const msg = error.message.toLowerCase();
+
+    // Image errors — must be checked BEFORE generic 'claude' match
+    if (msg.includes('could not process image') ||
+        msg.includes('image_content_error') ||
+        (msg.includes('invalid_request_error') && msg.includes('image'))) {
+      return FailureType.IMAGE_ERROR;
+    }
 
     if (msg.includes('econnreset') || msg.includes('etimedout') || msg.includes('enotfound')) {
       return FailureType.TRANSIENT;

@@ -148,12 +148,13 @@ export enum FailureType {
   CLAUDE_ERROR = 'claude_error',
   SESSION_CORRUPT = 'session_corrupt',
   AUTH_EXPIRED = 'auth_expired',
+  IMAGE_ERROR = 'image_error',
   UNKNOWN = 'unknown',
 }
 
 export interface RecoveryResult {
   success: boolean;
-  action: 'retried' | 'escalated' | 'aborted';
+  action: 'retried' | 'escalated' | 'aborted' | 'retried_without_images';
   message: string;
 }
 
