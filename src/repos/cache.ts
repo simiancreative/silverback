@@ -18,11 +18,13 @@ function repoUrl(org: string, repo: string): string {
 export class RepoCache {
   private readonly cacheBase: string;
   private readonly workspaceBase: string;
+  private readonly botName: string;
 
-  constructor(cacheBase?: string, workspaceBase?: string) {
+  constructor(cacheBase?: string, workspaceBase?: string, botName?: string) {
     const dataDir = process.env.DATA_DIR || path.join(process.cwd(), '.data');
     this.cacheBase = cacheBase || path.join(dataDir, 'repos');
     this.workspaceBase = workspaceBase || path.join(dataDir, 'workspaces');
+    this.botName = botName || 'silverback';
   }
 
   async ensureCached(org: string, repo: string): Promise<string> {
@@ -76,8 +78,8 @@ export class RepoCache {
     }
 
     // Configure git identity
-    await execFileAsync('git', ['-C', workspacePath, 'config', 'user.email', 'claude-bot@users.noreply.github.com']);
-    await execFileAsync('git', ['-C', workspacePath, 'config', 'user.name', 'Claude Bot']);
+    await execFileAsync('git', ['-C', workspacePath, 'config', 'user.email', `${this.botName}@users.noreply.github.com`]);
+    await execFileAsync('git', ['-C', workspacePath, 'config', 'user.name', this.botName]);
 
     logger.info('Workspace created', { threadId, org, repo, branch, workspacePath });
     return workspacePath;

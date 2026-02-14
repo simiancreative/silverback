@@ -14,7 +14,8 @@ const logger = new Logger('deploy-command');
 export function createDeployHandler(
   threadPRManager: ThreadPRManager,
   sessionManager: SessionManager,
-  workspaceManager: WorkspaceManager
+  workspaceManager: WorkspaceManager,
+  botName: string = 'silverback'
 ) {
   return async (command: any, client: WebClient): Promise<void> => {
     const channelId = command.channel_id;
@@ -91,7 +92,7 @@ export function createDeployHandler(
       logger.info('Branch pushed', { branch, threadTs });
 
       // Create PR
-      const prBody = PRManager.buildPRBody(threadTs, channelId, `Work from Slack thread`);
+      const prBody = PRManager.buildPRBody(threadTs, channelId, `Work from Slack thread`, botName);
       const pr = await PRManager.create({
         workspacePath: session.workspacePath,
         title: `[Claude] Work from thread ${threadTs.substring(0, 10)}`,
