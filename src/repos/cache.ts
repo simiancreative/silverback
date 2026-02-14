@@ -12,7 +12,7 @@ function repoUrl(org: string, repo: string): string {
   if (token) {
     return `https://x-access-token:${token}@github.com/${org}/${repo}.git`;
   }
-  return repoUrl(org, repo);
+  return `https://github.com/${org}/${repo}.git`;
 }
 
 export class RepoCache {
@@ -40,8 +40,22 @@ export class RepoCache {
 
     if (exists) {
       // Update existing bare cache
-      await execFileAsync('git', ['-C', cachePath, 'fetch', '--all', '--prune']);
-      logger.info('Repo cache updated', { org, repo });
+      try {
+        await execFileAsync('git', ['-C', cachePath, 'fetch', '--all', '--prune']);
+        logger.info('Repo cache updated', { org, repo });
+      } catch (error) {
+        // Check if the repo is empty (no commits/branches)
+        try {
+          const { stdout } = await execFileAsync('git', ['ls-remote', repoUrl(org, repo)]);
+          if (!stdout.trim()) {
+            logger.warn('Remote repo is empty, skipping fetch', { org, repo });
+            return cachePath;
+          }
+        } catch {
+          // ls-remote failed too -- throw original fetch error
+        }
+        throw error;
+      }
     } else {
       // First time: bare clone
       await fs.mkdir(path.dirname(cachePath), { recursive: true });
