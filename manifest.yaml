@@ -34,7 +34,7 @@ features:
       should_escape: false
     - command: /sb-deploy
       description: Squash and merge the associated PR
-      usage_hint: "[--cleanup]"
+      usage_hint: "<thread-timestamp>"
       should_escape: false
     - command: /sb-status
       description: Check SilverBack status
@@ -91,3 +91,4 @@ oauth_config:
       - mpim:read
       - groups:history
       - im:history
+      - reactions:write
