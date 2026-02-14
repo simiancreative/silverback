@@ -19,6 +19,7 @@ import { ThreadPRManager } from './manager/thread-pr';
 import { AuthVerifier } from './auth/verifier';
 import { StreamHandler } from './stream/handler';
 import { StreamParser } from './stream/parser';
+import { FileUploader } from './stream/file-uploader';
 import { FailureHandler } from './recovery/failure-handler';
 import { ContextCheckpointer } from './recovery/checkpointer';
 import { RepoCache } from './repos/cache';
@@ -85,6 +86,20 @@ async function main(): Promise<void> {
   const botUserId = authTest.user_id as string;
   logger.info('Bot user ID', { botUserId });
 
+  // Check for files:write scope needed for markdown file uploads
+  let fileUploader: FileUploader | null = null;
+  const scopes = ((authTest as any).response_metadata?.scopes as string[]) ?? [];
+  if (scopes.includes('files:write')) {
+    fileUploader = new FileUploader(client);
+    logger.info('File upload enabled (files:write scope present)');
+  } else if (scopes.length > 0) {
+    logger.warn('Missing files:write scope - structured content will not be uploaded as files. Add files:write to your Slack app OAuth scopes.');
+  } else {
+    // Some auth.test responses don't include scopes - create uploader optimistically
+    fileUploader = new FileUploader(client);
+    logger.info('File upload enabled (scope check unavailable, assuming files:write present)');
+  }
+
   // Register event handlers
   registerMentionHandler(app, queue);
   registerMessageHandler(app, queue, sessionManager);
@@ -149,7 +164,7 @@ async function main(): Promise<void> {
       }
 
       // Create stream handler for Slack updates
-      const streamHandler = await StreamHandler.create(client, request.channelId, request.threadId);
+      const streamHandler = await StreamHandler.create(client, request.channelId, request.threadId, fileUploader ?? undefined);
 
       // Set up stream parser
       const parser = new StreamParser();

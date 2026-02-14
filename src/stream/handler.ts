@@ -1,5 +1,7 @@
 import { WebClient } from '@slack/web-api';
 import { Logger } from '../logging/logger';
+import { classifyContent } from './content-classifier';
+import { FileUploader } from './file-uploader';
 
 const logger = new Logger('stream-handler');
 
@@ -14,6 +16,7 @@ export class StreamHandler {
     private slack: WebClient,
     private channel: string,
     private threadTs: string,
+    private fileUploader: FileUploader | null = null,
   ) {
     this.updateInterval = setInterval(() => this.flush(), 100);
   }
@@ -21,14 +24,15 @@ export class StreamHandler {
   static async create(
     slack: WebClient,
     channel: string,
-    threadTs: string
+    threadTs: string,
+    fileUploader?: FileUploader
   ): Promise<StreamHandler> {
     const result = await slack.chat.postMessage({
       channel,
       thread_ts: threadTs,
       text: '_Claude is thinking..._',
     });
-    const handler = new StreamHandler(slack, channel, threadTs);
+    const handler = new StreamHandler(slack, channel, threadTs, fileUploader || null);
     handler.currentMessageTs = result.ts!;
     return handler;
   }
@@ -42,6 +46,8 @@ export class StreamHandler {
     if (this.currentMessageTs && this.currentText.trim()) {
       this.dirty = true;
       await this.flush();
+      // Classify previous message and upload if structured
+      await this.classifyAndUpload(this.currentText, this.currentMessageTs);
     }
     // Reset for the new message
     this.currentText = '';
@@ -98,6 +104,34 @@ export class StreamHandler {
     this.dirty = true;
     await this.flush();
 
+    // Classify final message and upload if structured
+    await this.classifyAndUpload(this.currentText, this.currentMessageTs);
+
     logger.info('Stream complete', { messages: this.messageCount });
+  }
+
+  private async classifyAndUpload(text: string, messageTs: string | null): Promise<void> {
+    if (!this.fileUploader || !messageTs) return;
+
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const result = classifyContent(trimmed);
+    if (!result.isStructured) return;
+
+    logger.info('Structured content detected', { reason: result.reason, description: result.description });
+
+    // Upload file first, then rewrite message only on success
+    const uploaded = await this.fileUploader.uploadAndRewrite({
+      channel: this.channel,
+      threadTs: this.threadTs,
+      content: trimmed,
+      description: result.description,
+      existingMessageTs: messageTs,
+    });
+
+    if (!uploaded) {
+      logger.warn('File upload failed, keeping original message');
+    }
   }
 }
