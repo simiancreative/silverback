@@ -1,21 +1,35 @@
 import { App } from '@slack/bolt';
 import { RequestQueue } from '../../queue/request-queue';
 import { Logger } from '../../logging/logger';
+import { downloadTextFiles, SlackFileInfo } from '../utils/file-downloader';
+import { buildPrompt } from '../utils/prompt-builder';
 
 const logger = new Logger('mention-handler');
 
-export function registerMentionHandler(app: App, queue: RequestQueue): void {
+export function registerMentionHandler(app: App, queue: RequestQueue, botToken: string): void {
   app.event('app_mention', async ({ event, client, say }) => {
-    const prompt = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
+    const textPrompt = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
 
-    if (!prompt) {
+    // Extract files if present
+    const files: SlackFileInfo[] = 'files' in event && Array.isArray((event as any).files)
+      ? (event as any).files
+      : [];
+
+    if (!textPrompt && files.length === 0) {
       await say({ text: 'Please provide a task description after mentioning me.', thread_ts: event.ts });
       return;
     }
 
     const threadTs = event.thread_ts || event.ts;
 
-    logger.info('Received mention', { user: event.user, channel: event.channel, threadTs });
+    // Download text files if present
+    let prompt = textPrompt;
+    if (files.length > 0 && botToken) {
+      const downloaded = await downloadTextFiles(files, botToken);
+      prompt = buildPrompt(textPrompt, downloaded);
+    }
+
+    logger.info('Received mention', { user: event.user, channel: event.channel, threadTs, fileCount: files.length });
 
     const entry = await queue.enqueue({
       threadId: threadTs as string,
