@@ -1,5 +1,6 @@
 import { WebClient } from '@slack/web-api';
 import { ThreadPRManager } from '../../manager/thread-pr';
+import { ThreadCompletionManager } from '../../manager/thread-completion';
 import { SessionManager } from '../../orchestrator/session';
 import { WorkspaceManager } from '../../workspace/manager';
 import { BranchManager } from '../../git/branch';
@@ -15,6 +16,7 @@ export function createDeployHandler(
   threadPRManager: ThreadPRManager,
   sessionManager: SessionManager,
   workspaceManager: WorkspaceManager,
+  threadCompletionManager: ThreadCompletionManager,
   botName: string = 'silverback'
 ) {
   return async (command: any, client: WebClient): Promise<void> => {
@@ -22,19 +24,17 @@ export function createDeployHandler(
     const userId = command.user_id;
     const args = command.text?.trim() || '';
 
-    // Parse: /deploy [thread_ts] [--cleanup]
-    const doCleanup = args.includes('--cleanup');
-    const threadTs = args.replace('--cleanup', '').trim();
+    const threadTs = args.trim();
 
     if (!threadTs) {
       await client.chat.postEphemeral({
         channel: channelId,
         user: userId,
         text: [
-          'Usage: `/deploy <thread-timestamp> [--cleanup]`',
+          'Usage: `/deploy <thread-timestamp>`',
           '',
           'Run this command with the thread timestamp of the conversation you want to deploy.',
-          'Add `--cleanup` to remove the workspace after creating the PR.',
+          'A PR will be created and the thread will be marked complete with a :white_check_mark: reaction.',
           '',
           'Example: `/deploy 1234567890.123456`',
         ].join('\n'),
@@ -127,15 +127,8 @@ export function createDeployHandler(
         text: `PR created: ${pr.url}\n\nBranch \`${branch}\` pushed to \`${session.repository}\`.`,
       });
 
-      // Optional cleanup
-      if (doCleanup) {
-        await workspaceManager.cleanupWorkspace(threadTs);
-        await client.chat.postMessage({
-          channel: channelId,
-          thread_ts: threadTs,
-          text: 'Workspace cleaned up.',
-        });
-      }
+      // Mark thread as complete: add ✅ reaction and clean up resources
+      await threadCompletionManager.markComplete(client, channelId, threadTs);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Deploy failed', { threadTs, error });

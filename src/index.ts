@@ -16,6 +16,7 @@ import { SessionManager } from './orchestrator/session';
 import { RedisStore } from './store/redis';
 import { MemoryStore } from './store/memory';
 import { ThreadPRManager } from './manager/thread-pr';
+import { ThreadCompletionManager } from './manager/thread-completion';
 import { AuthVerifier } from './auth/verifier';
 import { StreamHandler } from './stream/handler';
 import { StreamParser } from './stream/parser';
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
   // Initialize repo cache and workspace manager with bot name
   const repoCache = new RepoCache(undefined, undefined, botName);
   const workspaceManager = new WorkspaceManager(store, repoCache);
+  const threadCompletionManager = new ThreadCompletionManager(sessionManager, workspaceManager, store);
 
   // Check for files:write scope needed for markdown file uploads
   let fileUploader: FileUploader | null = null;
@@ -117,7 +119,7 @@ async function main(): Promise<void> {
   // Register commands
   const registry = new CommandRegistry(app, workspaceManager);
   registry.registerHandler('sb-claude', createClaudeHandler(queue));
-  registry.registerHandler('sb-deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager, botName));
+  registry.registerHandler('sb-deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager, threadCompletionManager, botName));
   registry.registerHandler('sb-status', createStatusHandler(queue, auth, executor, workspaceManager));
   registry.registerHandler('sb-queue', createQueueHandler(queue));
   registry.registerHandler('sb-connect', createConnectHandler(workspaceManager));
