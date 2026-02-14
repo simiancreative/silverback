@@ -1,8 +1,10 @@
 import { App } from '@slack/bolt';
 import { RequestQueue } from '../../queue/request-queue';
 import { Logger } from '../../logging/logger';
-import { downloadTextFiles, SlackFileInfo } from '../utils/file-downloader';
+import { downloadTextFiles, downloadImageFiles, SlackFileInfo } from '../utils/file-downloader';
 import { buildPrompt } from '../utils/prompt-builder';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 const logger = new Logger('mention-handler');
 
@@ -22,20 +24,27 @@ export function registerMentionHandler(app: App, queue: RequestQueue, botToken: 
 
     const threadTs = event.thread_ts || event.ts;
 
-    // Download text files if present
+    // Download text files and images if present
     let prompt = textPrompt;
+    let imageDir: string | undefined;
     if (files.length > 0 && botToken) {
       const downloaded = await downloadTextFiles(files, botToken);
-      prompt = buildPrompt(textPrompt, downloaded);
+      const imgDir = join(tmpdir(), `slack-images-${threadTs}`);
+      const downloadedImages = await downloadImageFiles(files, botToken, imgDir);
+      if (downloadedImages.length > 0) {
+        imageDir = imgDir;
+      }
+      prompt = buildPrompt(textPrompt, downloaded, downloadedImages);
     }
 
-    logger.info('Received mention', { user: event.user, channel: event.channel, threadTs, fileCount: files.length });
+    logger.info('Received mention', { user: event.user, channel: event.channel, threadTs, fileCount: files.length, hasImages: !!imageDir });
 
     const entry = await queue.enqueue({
       threadId: threadTs as string,
       channelId: event.channel,
       userId: event.user || 'unknown',
       prompt,
+      imageDir,
     });
 
     if (entry.position > 0) {
