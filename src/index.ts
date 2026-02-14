@@ -164,8 +164,8 @@ async function main(): Promise<void> {
         }
       });
 
+      let executeSuccess = false;
       try {
-        // Execute Claude via executor
         await executor.execute(
           {
             prompt: request.prompt,
@@ -174,11 +174,48 @@ async function main(): Promise<void> {
           },
           (chunk: string) => parser.processChunk(chunk),
         );
+        executeSuccess = true;
+      } catch (execError) {
+        // If resume failed due to stale session, retry without resume
+        const execMsg = execError instanceof Error ? execError.message : String(execError);
+        if (session.claudeSessionId && execMsg.includes('No conversation found')) {
+          taskLogger.warn('Stale session ID, retrying without resume', { threadId: request.threadId, staleSessionId: session.claudeSessionId });
+          await sessionManager.updateSession(request.threadId, { claudeSessionId: '' });
+          extractedSessionId = '';
 
+          // Reset stream handler for fresh attempt
+          await streamHandler.complete();
+          const retryStreamHandler = await StreamHandler.create(client, request.channelId, request.threadId);
+          const retryParser = new StreamParser();
+          retryParser.on('message_start', () => retryStreamHandler.onMessageStart());
+          retryParser.on('text', (text: string) => retryStreamHandler.onData(text));
+          retryParser.on('result', (data: { success?: boolean; session_id?: string }) => {
+            if (data?.session_id) {
+              extractedSessionId = data.session_id;
+            }
+          });
+
+          try {
+            await executor.execute(
+              {
+                prompt: request.prompt,
+                cwd: workspacePath || undefined,
+              },
+              (chunk: string) => retryParser.processChunk(chunk),
+            );
+            retryParser.flush();
+            executeSuccess = true;
+          } finally {
+            await retryStreamHandler.complete();
+          }
+        } else {
+          throw execError;
+        }
+      }
+
+      if (executeSuccess) {
         // IMPORTANT: flush parser after execute -- result event may be buffered
         parser.flush();
-      } finally {
-        // Always stop the stream handler interval, even on error
         await streamHandler.complete();
       }
 
