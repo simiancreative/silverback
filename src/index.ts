@@ -100,9 +100,15 @@ async function main(): Promise<void> {
     logger.info('File upload enabled (scope check unavailable, assuming files:write present)');
   }
 
+  // Check for files:read scope needed for text snippet input
+  const botToken = process.env.SLACK_BOT_TOKEN || '';
+  if (scopes.length > 0 && !scopes.includes('files:read')) {
+    logger.warn('Missing files:read scope - text snippet input will not work. Add files:read to your Slack app OAuth scopes.');
+  }
+
   // Register event handlers
-  registerMentionHandler(app, queue);
-  registerMessageHandler(app, queue, sessionManager);
+  registerMentionHandler(app, queue, botToken);
+  registerMessageHandler(app, queue, sessionManager, botToken);
   registerChannelJoinHandler(app, workspaceManager, botUserId);
 
   // Register commands
