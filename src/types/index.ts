@@ -112,6 +112,7 @@ export interface QueuedRequest {
   position: number;
   retryCount?: number;
   startedAt?: string;
+  imageDir?: string;
 }
 
 // Recovery types

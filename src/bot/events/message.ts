@@ -2,8 +2,10 @@ import { App } from '@slack/bolt';
 import { RequestQueue } from '../../queue/request-queue';
 import { SessionManager } from '../../orchestrator/session';
 import { Logger } from '../../logging/logger';
-import { downloadTextFiles, SlackFileInfo } from '../utils/file-downloader';
+import { downloadTextFiles, downloadImageFiles, SlackFileInfo } from '../utils/file-downloader';
 import { buildPrompt } from '../utils/prompt-builder';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 const logger = new Logger('message-handler');
 
@@ -33,20 +35,27 @@ export function registerMessageHandler(app: App, queue: RequestQueue, sessionMan
     const session = await sessionManager.getSession(threadTs);
     if (!session) return;
 
-    // Download text files if present
+    // Download text files and images if present
     let prompt = text;
+    let imageDir: string | undefined;
     if (files.length > 0 && botToken) {
       const downloaded = await downloadTextFiles(files, botToken);
-      prompt = buildPrompt(text, downloaded);
+      const imgDir = join(tmpdir(), `slack-images-${threadTs}`);
+      const downloadedImages = await downloadImageFiles(files, botToken, imgDir);
+      if (downloadedImages.length > 0) {
+        imageDir = imgDir;
+      }
+      prompt = buildPrompt(text, downloaded, downloadedImages);
     }
 
-    logger.info('Thread reply in active session', { threadTs, userId, fileCount: files.length });
+    logger.info('Thread reply in active session', { threadTs, userId, fileCount: files.length, hasImages: !!imageDir });
 
     const entry = await queue.enqueue({
       threadId: threadTs,
       channelId,
       userId,
       prompt,
+      imageDir,
     });
 
     if (entry.position > 0) {

@@ -32,6 +32,7 @@ import { createAuthMiddleware } from './bot/middleware/auth';
 import { RateLimiter } from './bot/middleware/rate-limit';
 import { ConfigWatcher } from './config/watcher';
 import * as path from 'path';
+import { rm } from 'fs/promises';
 
 const logger = new Logger('main');
 
@@ -252,6 +253,16 @@ async function main(): Promise<void> {
         });
       }
 
+      // Clean up downloaded images directory
+      if (request.imageDir) {
+        try {
+          await rm(request.imageDir, { recursive: true, force: true });
+          taskLogger.debug('Cleaned up image directory', { imageDir: request.imageDir });
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+
       // Checkpoint context with the actual sessionId from this execution
       await checkpointer.checkpoint({
         threadId: request.threadId,
@@ -264,6 +275,15 @@ async function main(): Promise<void> {
       taskLogger.info('Request completed', { threadId: request.threadId });
     } catch (error) {
       taskLogger.error('Request failed', { error, threadId: request.threadId });
+
+      // Clean up downloaded images directory even on failure
+      if (request.imageDir) {
+        try {
+          await rm(request.imageDir, { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
 
       // Notify user in Slack thread
       const errMsg = error instanceof Error ? error.message : String(error);
@@ -284,6 +304,9 @@ async function main(): Promise<void> {
 
       // Re-enqueue if recovery says to retry
       if (result.success && result.action === 'retried') {
+        if (request.imageDir) {
+          taskLogger.warn('Retrying request that had images; image context will be lost', { threadId: request.threadId, imageDir: request.imageDir });
+        }
         taskLogger.info('Re-enqueuing request after transient failure', { threadId: request.threadId, retryCount: currentRetryCount + 1 });
         await queue.enqueue({
           threadId: request.threadId,
