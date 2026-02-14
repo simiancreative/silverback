@@ -38,3 +38,13 @@ export function buildPrompt(messageText: string, files: DownloadedFile[], images
 
   return parts.join('\n\n').trimEnd();
 }
+
+/**
+ * Strips all <attached_image>...</attached_image> blocks from a prompt.
+ * Used when image processing fails and we need to retry without images.
+ */
+export function stripImageBlocks(prompt: string): string {
+  // Remove <attached_image ...>...</attached_image> blocks and surrounding whitespace
+  const stripped = prompt.replace(/<attached_image[^>]*>[\s\S]*?<\/attached_image>\s*/g, '');
+  return stripped.trim();
+}

@@ -285,14 +285,6 @@ async function main(): Promise<void> {
         }
       }
 
-      // Notify user in Slack thread
-      const errMsg = error instanceof Error ? error.message : String(error);
-      await client.chat.postMessage({
-        channel: request.channelId,
-        thread_ts: request.threadId,
-        text: `:x: Error: ${errMsg}`,
-      }).catch((e) => taskLogger.error('Failed to post error to Slack', { error: e }));
-
       const currentRetryCount = request.retryCount || 0;
       const result = await failureHandler.handle(error as Error, {
         threadId: request.threadId,
@@ -302,8 +294,44 @@ async function main(): Promise<void> {
         retryCount: currentRetryCount,
       });
 
-      // Re-enqueue if recovery says to retry
-      if (result.success && result.action === 'retried') {
+      // Handle image error: strip images and re-enqueue (no raw error shown to user)
+      if (result.success && result.action === 'retried_without_images') {
+        const { stripImageBlocks } = await import('./bot/utils/prompt-builder');
+        const strippedPrompt = stripImageBlocks(request.prompt);
+
+        if (strippedPrompt && strippedPrompt !== request.prompt) {
+          taskLogger.info('Retrying without images after image processing failure', { threadId: request.threadId });
+          await client.chat.postMessage({
+            channel: request.channelId,
+            thread_ts: request.threadId,
+            text: `:warning: Image could not be processed by the API. Retrying your request without the image attachment.`,
+          }).catch((e) => taskLogger.error('Failed to post image warning to Slack', { error: e }));
+
+          await queue.enqueue({
+            threadId: request.threadId,
+            channelId: request.channelId,
+            userId: request.userId,
+            prompt: strippedPrompt,
+            retryCount: currentRetryCount + 1,
+          });
+        } else {
+          taskLogger.warn('Cannot retry without images: prompt would be empty or unchanged', { threadId: request.threadId });
+          await client.chat.postMessage({
+            channel: request.channelId,
+            thread_ts: request.threadId,
+            text: `:x: Image could not be processed and no text content was provided. Please try again with a different image or add a text description.`,
+          }).catch((e) => taskLogger.error('Failed to post error to Slack', { error: e }));
+        }
+      }
+      // Re-enqueue if recovery says to retry (standard retry)
+      else if (result.success && result.action === 'retried') {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        await client.chat.postMessage({
+          channel: request.channelId,
+          thread_ts: request.threadId,
+          text: `:x: Error: ${errMsg}`,
+        }).catch((e) => taskLogger.error('Failed to post error to Slack', { error: e }));
+
         if (request.imageDir) {
           taskLogger.warn('Retrying request that had images; image context will be lost', { threadId: request.threadId, imageDir: request.imageDir });
         }
@@ -315,6 +343,15 @@ async function main(): Promise<void> {
           prompt: request.prompt,
           retryCount: currentRetryCount + 1,
         });
+      }
+      // Non-recoverable error: notify user
+      else {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        await client.chat.postMessage({
+          channel: request.channelId,
+          thread_ts: request.threadId,
+          text: `:x: Error: ${errMsg}`,
+        }).catch((e) => taskLogger.error('Failed to post error to Slack', { error: e }));
       }
     }
   });
