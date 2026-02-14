@@ -51,7 +51,7 @@ export class PRManager {
     return stdout.trim();
   }
 
-  static buildPRBody(threadId: string, channelId: string, prompt: string): string {
+  static buildPRBody(threadId: string, channelId: string, prompt: string, botName: string = 'silverback'): string {
     return [
       '## Summary',
       '',
@@ -59,7 +59,7 @@ export class PRManager {
       '',
       '---',
       '',
-      `*Created by Claude Bot from Slack thread \`${threadId}\` in channel \`${channelId}\`*`,
+      `*Created by ${botName} from Slack thread \`${threadId}\` in channel \`${channelId}\`*`,
       '',
       'Generated with Claude Code + oh-my-claudecode',
     ].join('\n');

@@ -47,8 +47,6 @@ async function main(): Promise<void> {
   const executor = createExecutor();
   const sessionManager = new SessionManager(store);
   const threadPRManager = new ThreadPRManager(store);
-  const repoCache = new RepoCache();
-  const workspaceManager = new WorkspaceManager(store, repoCache);
   const failureHandler = new FailureHandler(store);
   const checkpointer = new ContextCheckpointer(store);
   const healthChecker = new HealthChecker(executor);
@@ -84,7 +82,12 @@ async function main(): Promise<void> {
   const client = getWebClient();
   const authTest = await client.auth.test();
   const botUserId = authTest.user_id as string;
-  logger.info('Bot user ID', { botUserId });
+  const botName = (authTest.user as string) || 'silverback';
+  logger.info('Bot user ID', { botUserId, botName });
+
+  // Initialize repo cache and workspace manager with bot name
+  const repoCache = new RepoCache(undefined, undefined, botName);
+  const workspaceManager = new WorkspaceManager(store, repoCache);
 
   // Check for files:write scope needed for markdown file uploads
   let fileUploader: FileUploader | null = null;
@@ -114,7 +117,7 @@ async function main(): Promise<void> {
   // Register commands
   const registry = new CommandRegistry(app, workspaceManager);
   registry.registerHandler('sb-claude', createClaudeHandler(queue));
-  registry.registerHandler('sb-deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager));
+  registry.registerHandler('sb-deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager, botName));
   registry.registerHandler('sb-status', createStatusHandler(queue, auth, executor, workspaceManager));
   registry.registerHandler('sb-queue', createQueueHandler(queue));
   registry.registerHandler('sb-connect', createConnectHandler(workspaceManager));
