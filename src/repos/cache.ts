@@ -36,12 +36,13 @@ export class RepoCache {
       throw new Error('Path traversal detected in cache path');
     }
 
-    try {
-      await fs.access(cachePath);
+    const exists = await fs.access(cachePath).then(() => true, () => false);
+
+    if (exists) {
       // Update existing bare cache
       await execFileAsync('git', ['-C', cachePath, 'fetch', '--all', '--prune']);
       logger.info('Repo cache updated', { org, repo });
-    } catch {
+    } else {
       // First time: bare clone
       await fs.mkdir(path.dirname(cachePath), { recursive: true });
       await execFileAsync('git', ['clone', '--bare', repoUrl(org, repo), cachePath]);
@@ -51,8 +52,10 @@ export class RepoCache {
     return cachePath;
   }
 
-  async createWorkspace(threadId: string, org: string, repo: string, branch?: string): Promise<string> {
-    const cachePath = await this.ensureCached(org, repo);
+  async createWorkspace(threadId: string, org: string, repo: string, branch?: string, cachePath?: string): Promise<string> {
+    if (!cachePath) {
+      cachePath = await this.ensureCached(org, repo);
+    }
     const workspacePath = path.join(this.workspaceBase, threadId);
 
     // Path validation: prevent traversal

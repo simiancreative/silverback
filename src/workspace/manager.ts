@@ -69,9 +69,10 @@ export class WorkspaceManager {
     const mapping = await this.getChannelRepo(channelId);
     if (!mapping) return null;
 
-    // Create workspace with branch
+    // Ensure bare cache is ready (with per-repo lock to prevent races)
+    const cachePath = await this.ensureCachedWithLock(mapping.org, mapping.repo);
     const branch = BranchManager.generateBranchName(threadId);
-    const workspacePath = await this.repoCache.createWorkspace(threadId, mapping.org, mapping.repo, branch);
+    const workspacePath = await this.repoCache.createWorkspace(threadId, mapping.org, mapping.repo, branch, cachePath);
 
     // Store workspace path
     await this.store.set(`workspace:${threadId}`, { workspacePath }, 7 * 24 * 60 * 60 * 1000); // 7 day TTL
