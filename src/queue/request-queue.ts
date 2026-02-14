@@ -1,19 +1,55 @@
 import { v4 as uuidv4 } from 'uuid';
-import { QueuedRequest, QueueEntry, QueueStatus } from '../types';
+import { QueuedRequest, QueueEntry, QueueStatus, KeyValueStore } from '../types';
 import { Logger } from '../logging/logger';
 
 const logger = new Logger('request-queue');
 
+const QUEUE_PENDING_KEY = 'queue:pending';
+const QUEUE_ACTIVE_KEY = 'queue:active';
+const QUEUE_ACTIVE_STARTED_KEY = 'queue:active:started';
+
+const DEFAULT_STUCK_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 export class RequestQueue {
+  // In-memory cache mirrors the store for synchronous reads (getQueueStatus)
   private queue: QueuedRequest[] = [];
   private activeSession: QueuedRequest | null = null;
   private readonly maxConcurrent: number;
+  private readonly store: KeyValueStore;
+  private readonly stuckTimeoutMs: number;
   private processingCallback: ((request: QueuedRequest) => Promise<void>) | null = null;
   private processingInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(config: { maxConcurrent: number }) {
+  constructor(config: { maxConcurrent: number; stuckTimeoutMs?: number }, store: KeyValueStore) {
     this.maxConcurrent = config.maxConcurrent;
+    this.store = store;
+    this.stuckTimeoutMs = config.stuckTimeoutMs ?? DEFAULT_STUCK_TIMEOUT_MS;
   }
+
+  // --- Store persistence helpers ---
+
+  private async persistPendingQueue(): Promise<void> {
+    await this.store.set(QUEUE_PENDING_KEY, this.queue);
+  }
+
+  private async persistActive(): Promise<void> {
+    if (this.activeSession) {
+      await this.store.set(QUEUE_ACTIVE_KEY, this.activeSession);
+      await this.store.set(QUEUE_ACTIVE_STARTED_KEY, new Date().toISOString());
+    } else {
+      await this.store.delete(QUEUE_ACTIVE_KEY);
+      await this.store.delete(QUEUE_ACTIVE_STARTED_KEY);
+    }
+  }
+
+  private async loadFromStore(): Promise<void> {
+    const pending = await this.store.get<QueuedRequest[]>(QUEUE_PENDING_KEY);
+    this.queue = pending || [];
+    const active = await this.store.get<QueuedRequest>(QUEUE_ACTIVE_KEY);
+    this.activeSession = active || null;
+  }
+
+  // --- Public API ---
 
   async enqueue(request: Omit<QueuedRequest, 'id' | 'enqueuedAt' | 'position'>): Promise<QueueEntry> {
     const entry: QueuedRequest = {
@@ -23,6 +59,7 @@ export class RequestQueue {
       position: this.queue.length + 1,
     };
     this.queue.push(entry);
+    await this.persistPendingQueue();
 
     logger.info('Request enqueued', { id: entry.id, position: entry.position, threadId: entry.threadId });
 
@@ -43,14 +80,18 @@ export class RequestQueue {
     }
     this.activeSession = this.queue.shift()!;
     this.updatePositions();
+    await this.persistPendingQueue();
+    await this.persistActive();
+
     logger.info('Request dequeued', { id: this.activeSession.id, threadId: this.activeSession.threadId });
     return this.activeSession;
   }
 
-  release(): void {
+  async release(): Promise<void> {
     if (this.activeSession) {
       logger.info('Session released', { id: this.activeSession.id });
       this.activeSession = null;
+      await this.persistActive();
     }
   }
 
@@ -82,6 +123,9 @@ export class RequestQueue {
     this.processingInterval = setInterval(async () => {
       if (!this.processingCallback) return;
 
+      // Check for stuck active request
+      await this.checkAndReleaseStuck();
+
       const request = await this.dequeue();
       if (!request) return;
 
@@ -90,7 +134,7 @@ export class RequestQueue {
       } catch (error) {
         logger.error('Processing failed', { error, requestId: request.id });
       } finally {
-        this.release();
+        await this.release();
       }
     }, 1000); // Check every second
   }
@@ -99,6 +143,46 @@ export class RequestQueue {
     if (this.processingInterval) {
       clearInterval(this.processingInterval);
       this.processingInterval = null;
+    }
+  }
+
+  /**
+   * Check if the active request is stuck (older than stuckTimeoutMs) and release it.
+   */
+  private async checkAndReleaseStuck(): Promise<void> {
+    if (!this.activeSession) return;
+
+    const startedAt = await this.store.get<string>(QUEUE_ACTIVE_STARTED_KEY);
+    if (!startedAt) return;
+
+    const elapsed = Date.now() - new Date(startedAt).getTime();
+    if (elapsed > this.stuckTimeoutMs) {
+      logger.warn('Releasing stuck active request', {
+        id: this.activeSession.id,
+        threadId: this.activeSession.threadId,
+        elapsedMs: elapsed,
+        stuckTimeoutMs: this.stuckTimeoutMs,
+      });
+      this.activeSession = null;
+      await this.persistActive();
+    }
+  }
+
+  /**
+   * Recover queue state on startup. Loads persisted state from the store
+   * and releases any stuck active request that may have been left behind
+   * if the process restarted mid-processing.
+   */
+  async recoverQueue(): Promise<void> {
+    await this.loadFromStore();
+
+    if (this.activeSession) {
+      logger.warn('Found active request on startup, releasing (likely from previous process)', {
+        id: this.activeSession.id,
+        threadId: this.activeSession.threadId,
+      });
+      this.activeSession = null;
+      await this.persistActive();
     }
   }
 }

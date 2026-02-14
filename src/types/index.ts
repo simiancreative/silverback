@@ -110,6 +110,8 @@ export interface QueuedRequest {
   prompt: string;
   enqueuedAt: Date;
   position: number;
+  retryCount?: number;
+  startedAt?: string;
 }
 
 // Recovery types
@@ -128,6 +130,8 @@ export interface KeyValueStore {
   set<T>(key: string, value: T, ttlMs?: number): Promise<void>;
   delete(key: string): Promise<boolean>;
   exists(key: string): Promise<boolean>;
+  keys(pattern: string): Promise<string[]>;
+  del(key: string): Promise<number>;
 }
 
 // Auth types

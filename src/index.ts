@@ -40,7 +40,8 @@ async function main(): Promise<void> {
   const store = process.env.REDIS_URL ? new RedisStore(process.env.REDIS_URL) : new MemoryStore();
 
   // Initialize core services
-  const queue = new RequestQueue({ maxConcurrent: parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10) });
+  const queue = new RequestQueue({ maxConcurrent: parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10) }, store);
+  await queue.recoverQueue();
   const auth = new AuthVerifier();
   const executor = createExecutor();
   const sessionManager = new SessionManager(store);
@@ -194,7 +195,7 @@ async function main(): Promise<void> {
         sessionId: extractedSessionId,
         channelId: request.channelId,
         prompt: request.prompt,
-        retryCount: 0,
+        retryCount: request.retryCount || 0,
       });
 
       taskLogger.info('Request completed', { threadId: request.threadId });
@@ -209,22 +210,24 @@ async function main(): Promise<void> {
         text: `:x: Error: ${errMsg}`,
       }).catch((e) => taskLogger.error('Failed to post error to Slack', { error: e }));
 
+      const currentRetryCount = request.retryCount || 0;
       const result = await failureHandler.handle(error as Error, {
         threadId: request.threadId,
         channelId: request.channelId,
         sessionId: '',
         prompt: request.prompt,
-        retryCount: 0,
+        retryCount: currentRetryCount,
       });
 
       // Re-enqueue if recovery says to retry
       if (result.success && result.action === 'retried') {
-        taskLogger.info('Re-enqueuing request after transient failure', { threadId: request.threadId });
+        taskLogger.info('Re-enqueuing request after transient failure', { threadId: request.threadId, retryCount: currentRetryCount + 1 });
         await queue.enqueue({
           threadId: request.threadId,
           channelId: request.channelId,
           userId: request.userId,
           prompt: request.prompt,
+          retryCount: currentRetryCount + 1,
         });
       }
     }
