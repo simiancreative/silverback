@@ -91,11 +91,32 @@ export function createDeployHandler(
       await BranchManager.pushBranch(session.workspacePath, branch);
       logger.info('Branch pushed', { branch, threadTs });
 
-      // Create PR
-      const prBody = PRManager.buildPRBody(threadTs, channelId, `Work from Slack thread`, botName);
+      // Generate meaningful PR title and body from actual changes using Claude
+      await client.chat.postMessage({
+        channel: channelId,
+        thread_ts: threadTs,
+        text: 'Generating PR title and description from changes...',
+      });
+
+      const { title: prTitle, body: generatedBody } = await PRManager.generatePRContent(
+        session.workspacePath,
+        branch,
+      );
+
+      // Append Slack thread metadata footer
+      const prBody = [
+        generatedBody,
+        '',
+        '---',
+        '',
+        `*Created by ${botName} from Slack thread \`${threadTs}\` in channel \`${channelId}\`*`,
+        '',
+        'Generated with Claude Code + oh-my-claudecode',
+      ].join('\n');
+
       const pr = await PRManager.create({
         workspacePath: session.workspacePath,
-        title: `[Claude] Work from thread ${threadTs.substring(0, 10)}`,
+        title: prTitle,
         body: prBody,
         branch,
         baseBranch: 'main',
