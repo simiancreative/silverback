@@ -27,11 +27,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && apt-get update && apt-get install -y --no-install-recommends gh \
   && rm -rf /var/lib/apt/lists/*
 
+# Install Go (supports both amd64 and arm64 architectures)
+ARG GO_VERSION=1.24.13
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" \
+    | tar -C /usr/local -xzf -
+ENV PATH="/usr/local/go/bin:/home/bot/go/bin:${PATH}"
+ENV GOPATH="/home/bot/go"
+
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create non-root user
-RUN useradd -m -s /bin/bash bot
+RUN useradd -m -s /bin/bash bot \
+  && mkdir -p /home/bot/go \
+  && chown bot:bot /home/bot/go
 
 # Install oh-my-claudecode plugin as bot user
 USER bot
