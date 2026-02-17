@@ -29,6 +29,12 @@ commands:
     handler: "./handlers/connect"
     enabled: true
 
+  - name: sb-mcp-token
+    description: "Generate an MCP auth token for testing"
+    usage: "/sb-mcp-token <env> <tools_csv> [ttl_hours]"
+    handler: "./handlers/mcp-token"
+    enabled: true
+
   # OMC Commands
   - name: sb-autopilot
     description: "Start autopilot mode"

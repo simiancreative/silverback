@@ -9,7 +9,7 @@ import { Logger } from '../../logging/logger';
 const logger = new Logger('command-registry');
 
 // Commands that don't require a channel to be connected to a repo
-const CONNECTION_EXEMPT = new Set(['sb-connect', 'sb-status', 'sb-queue', 'sb-cancel']);
+const CONNECTION_EXEMPT = new Set(['sb-connect', 'sb-status', 'sb-queue', 'sb-cancel', 'sb-mcp-token']);
 
 export class CommandRegistry {
   private commands: Map<string, CommandDefinition> = new Map();
