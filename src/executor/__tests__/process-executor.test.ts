@@ -83,7 +83,7 @@ describe('ProcessExecutor', () => {
         '--verbose',
         '--output-format', 'stream-json',
         '--dangerously-skip-permissions',
-        '--allowedTools', '*',
+        '--model', expect.any(String),
         '--', 'test prompt'
       ],
       expect.objectContaining({
@@ -240,12 +240,22 @@ describe('ProcessExecutor', () => {
   });
 
   it('healthCheck() returns false when credentials file missing', async () => {
+    // Save and clear env tokens so healthCheck falls through to file check
+    const savedOauth = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    const savedApiKey = process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    delete process.env.ANTHROPIC_API_KEY;
+
     mockExistsSync.mockReturnValue(false);
 
     const result = await executor.healthCheck();
 
     expect(result).toBe(false);
     expect(mockExistsSync).toHaveBeenCalled();
+
+    // Restore env
+    if (savedOauth) process.env.CLAUDE_CODE_OAUTH_TOKEN = savedOauth;
+    if (savedApiKey) process.env.ANTHROPIC_API_KEY = savedApiKey;
   });
 
   it('healthCheck() returns true when credentials exist and claude --version succeeds', async () => {
@@ -293,6 +303,6 @@ describe('ProcessExecutor', () => {
     const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
     expect(spawnArgs).not.toContain('--dangerously-skip-permissions');
     expect(spawnArgs).toContain('--print');
-    expect(spawnArgs).toContain('--allowedTools');
+    expect(spawnArgs).toContain('--model');
   });
 });
