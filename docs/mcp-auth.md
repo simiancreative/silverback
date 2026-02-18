@@ -61,7 +61,7 @@ Create `.silverback-auth.json` in the repo root to specify which MCP servers sho
 
 ```json
 {
-  "servers": ["vendgogh", "analytics-db"]
+  "servers": ["my-database", "analytics-db"]
 }
 ```
 
@@ -72,7 +72,7 @@ Create `.silverback-auth.json` in the repo root to specify which MCP servers sho
 - The file is committed to version control
 
 In this example:
-- `vendgogh` and `analytics-db` will be wrapped with authentication
+- `my-database` and `analytics-db` will be wrapped with authentication
 - Any other MCP servers (e.g., `filesystem`) will pass through without auth
 
 ## Step 2: Configure MCP Servers
@@ -89,9 +89,9 @@ The proxy reads both files and merges them. It does NOT read `.claude/settings.l
 ```json
 {
   "mcpServers": {
-    "vendgogh": {
+    "my-database": {
       "command": "npx",
-      "args": ["-y", "@vendgogh/mcp-server"],
+      "args": ["-y", "@example/mcp-db-server"],
       "env": {
         "DATABASE_URL": "postgres://user:pass@localhost/db"
       }
@@ -109,7 +109,7 @@ The proxy reads both files and merges them. It does NOT read `.claude/settings.l
 ```
 
 In this example:
-- `vendgogh` (if listed in `.silverback-auth.json`) will be wrapped with auth
+- `my-database` (if listed in `.silverback-auth.json`) will be wrapped with auth
 - `analytics-db` (if listed in `.silverback-auth.json`) will be wrapped with auth
 - `filesystem` will pass through unchanged (it's not in `.silverback-auth.json`)
 
@@ -118,9 +118,9 @@ In this example:
 ```json
 {
   "mcpServers": {
-    "vendgogh": {
+    "my-database": {
       "command": "npx",
-      "args": ["-y", "@vendgogh/mcp-server"]
+      "args": ["-y", "@example/mcp-db-server"]
     }
   }
 }
@@ -174,7 +174,7 @@ repo/
 │   ├── settings.json               # Claude settings (committed)
 │   ├── settings.local.json         # Generated at runtime (gitignored)
 │   └── mcp-auth/                   # Generated proxy configs (gitignored)
-│       ├── vendgogh.json
+│       ├── my-database.json
 │       └── analytics-db.json
 └── <child process>                 # Actual MCP servers run here
 ```
