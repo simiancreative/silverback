@@ -26,6 +26,7 @@ import { ContextCheckpointer } from './recovery/checkpointer';
 import { RepoCache } from './repos/cache';
 import { WorkspaceManager } from './workspace/manager';
 import { createExecutor } from './executor/factory';
+import { AbortError } from './executor/interface';
 import { HealthChecker } from './orchestrator/health';
 import { Logger } from './logging/logger';
 import { createAuthMiddleware } from './bot/middleware/auth';
@@ -43,10 +44,14 @@ async function main(): Promise<void> {
   const store = process.env.REDIS_URL ? new RedisStore(process.env.REDIS_URL) : new MemoryStore();
 
   // Initialize core services
-  const queue = new RequestQueue({ maxConcurrent: parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10) }, store);
-  await queue.recoverQueue();
   const auth = new AuthVerifier();
   const executor = createExecutor();
+  const queue = new RequestQueue(
+    { maxConcurrent: parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10) },
+    store,
+    () => executor.abort(),
+  );
+  await queue.recoverQueue();
   const sessionManager = new SessionManager(store);
   const threadPRManager = new ThreadPRManager(store);
   const failureHandler = new FailureHandler(store);
@@ -153,6 +158,8 @@ async function main(): Promise<void> {
     const taskLogger = new Logger('task-processor');
     taskLogger.info('Processing request', { threadId: request.threadId, userId: request.userId });
 
+    let streamHandler: StreamHandler | null = null;
+
     try {
       // Get or create session
       let session = await sessionManager.getSession(request.threadId);
@@ -176,12 +183,12 @@ async function main(): Promise<void> {
       }
 
       // Create stream handler for Slack updates
-      const streamHandler = await StreamHandler.create(client, request.channelId, request.threadId, fileUploader ?? undefined);
+      streamHandler = await StreamHandler.create(client, request.channelId, request.threadId, fileUploader ?? undefined);
 
       // Set up stream parser
       const parser = new StreamParser();
-      parser.on('message_start', () => streamHandler.onMessageStart());
-      parser.on('text', (text: string) => streamHandler.onData(text));
+      parser.on('message_start', () => streamHandler?.onMessageStart());
+      parser.on('text', (text: string) => streamHandler?.onData(text));
 
       // Wire claudeSessionId extraction from result event
       let extractedSessionId = session.claudeSessionId || '';
@@ -283,6 +290,18 @@ async function main(): Promise<void> {
         } catch {
           // Ignore cleanup errors
         }
+      }
+
+      // Handle intentional abort (superseded by new message in same thread).
+      // Note: the claudeSessionId from this aborted run is intentionally not persisted.
+      // The previously saved ID remains in SessionManager. If it becomes stale, the
+      // retry-without-resume logic (see "No conversation found" handling above) self-heals.
+      if (error instanceof AbortError) {
+        taskLogger.info('Request aborted by superseding message', { threadId: request.threadId });
+        if (streamHandler) {
+          await streamHandler.abort();
+        }
+        return; // Skip recovery and error messaging - the replacement is already queued
       }
 
       const currentRetryCount = request.retryCount || 0;

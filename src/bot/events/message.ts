@@ -58,7 +58,13 @@ export function registerMessageHandler(app: App, queue: RequestQueue, sessionMan
       imageDir,
     });
 
-    if (entry.position > 0) {
+    if (entry.interrupted) {
+      await client.chat.postMessage({
+        channel: channelId,
+        thread_ts: threadTs,
+        text: `Interrupting current response to process your new message...`,
+      });
+    } else if (entry.position > 0) {
       await client.chat.postMessage({
         channel: channelId,
         thread_ts: threadTs,

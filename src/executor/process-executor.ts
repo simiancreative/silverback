@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { Executor, ExecutorOptions, ExecutionResult, TimeoutError } from './interface';
+import { Executor, ExecutorOptions, ExecutionResult, TimeoutError, AbortError } from './interface';
 import { Logger } from '../logging/logger';
 
 const logger = new Logger('process-executor');
@@ -14,12 +14,15 @@ const SIGKILL_GRACE_MS = 5000;
 
 export class ProcessExecutor implements Executor {
   private activeProcess: ChildProcess | null = null;
+  private abortRequested = false;
   private activeTmpDir: string | null = null;
 
   async execute(
     options: ExecutorOptions,
     onData: (chunk: string) => void,
   ): Promise<ExecutionResult> {
+    this.abortRequested = false;
+
     // Create isolated working directory if cwd not provided
     let tmpDir: string | null = null;
     let cleanupTmpDir = false;
@@ -107,6 +110,11 @@ export class ProcessExecutor implements Executor {
           await this.cleanupTmpDir();
         }
 
+        if (this.abortRequested) {
+          reject(new AbortError());
+          return;
+        }
+
         if (timedOut) {
           reject(new TimeoutError(timeoutMs));
           return;
@@ -158,9 +166,9 @@ export class ProcessExecutor implements Executor {
   async abort(): Promise<void> {
     if (this.activeProcess) {
       logger.info('Aborting active process');
-      this.activeProcess.kill('SIGTERM');
+      this.abortRequested = true;
 
-      // Give 5s grace, then SIGKILL
+      // Register close listener BEFORE sending SIGTERM to avoid missing the event
       await new Promise<void>((resolve) => {
         const killTimer = setTimeout(() => {
           if (this.activeProcess && !this.activeProcess.killed) {
@@ -173,6 +181,8 @@ export class ProcessExecutor implements Executor {
           clearTimeout(killTimer);
           resolve();
         });
+
+        this.activeProcess!.kill('SIGTERM');
       });
 
       this.activeProcess = null;

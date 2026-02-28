@@ -90,6 +90,7 @@ export interface QueueEntry {
   id: string;
   position: number;
   estimatedWait: number;
+  interrupted?: boolean;  // true if this enqueue triggered an interrupt of the active session
 }
 
 export interface QueueStatus {
