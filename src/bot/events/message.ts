@@ -35,8 +35,17 @@ export function registerMessageHandler(app: App, queue: RequestQueue, sessionMan
     const session = await sessionManager.getSession(threadTs);
     if (!session) return;
 
+    // Detect "interrupt:" prefix — strip it and flag for interrupt
+    let messageText = text;
+    let interrupt = false;
+    if (messageText.toLowerCase().startsWith('interrupt:')) {
+      interrupt = true;
+      messageText = messageText.slice('interrupt:'.length).trim();
+      if (!messageText && files.length === 0) return; // Nothing left after stripping prefix
+    }
+
     // Download text files and images if present
-    let prompt = text;
+    let prompt = messageText;
     let imageDir: string | undefined;
     if (files.length > 0 && botToken) {
       const downloaded = await downloadTextFiles(files, botToken);
@@ -56,6 +65,7 @@ export function registerMessageHandler(app: App, queue: RequestQueue, sessionMan
       userId,
       prompt,
       imageDir,
+      interrupt,
     });
 
     if (entry.interrupted) {
