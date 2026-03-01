@@ -110,6 +110,24 @@ export class StreamHandler {
     logger.info('Stream complete', { messages: this.messageCount });
   }
 
+  /**
+   * Abort the stream, appending an optional suffix to the current message.
+   * Used when a new message in the same thread supersedes the current one.
+   */
+  async abort(suffix: string = '\n\n_(interrupted)_'): Promise<void> {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+
+    // Append suffix to current text
+    this.currentText += suffix;
+    this.dirty = true;
+    await this.flush();
+
+    logger.info('Stream aborted', { messages: this.messageCount });
+  }
+
   private async classifyAndUpload(text: string, messageTs: string | null): Promise<void> {
     if (!this.fileUploader || !messageTs) return;
 

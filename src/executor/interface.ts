@@ -11,6 +11,13 @@ export class TimeoutError extends Error {
   }
 }
 
+export class AbortError extends Error {
+  constructor() {
+    super('Execution aborted by superseding request');
+    this.name = 'AbortError';
+  }
+}
+
 export interface ExecutionResult {
   exitCode: number;
 }

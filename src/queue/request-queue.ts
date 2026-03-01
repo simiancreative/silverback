@@ -19,11 +19,13 @@ export class RequestQueue {
   private readonly stuckTimeoutMs: number;
   private processingCallback: ((request: QueuedRequest) => Promise<void>) | null = null;
   private processingInterval: ReturnType<typeof setInterval> | null = null;
+  private abortCallback: (() => Promise<void>) | null = null;
 
-  constructor(config: { maxConcurrent: number; stuckTimeoutMs?: number }, store: KeyValueStore) {
+  constructor(config: { maxConcurrent: number; stuckTimeoutMs?: number }, store: KeyValueStore, abortCallback?: () => Promise<void>) {
     this.maxConcurrent = config.maxConcurrent;
     this.store = store;
     this.stuckTimeoutMs = config.stuckTimeoutMs ?? DEFAULT_STUCK_TIMEOUT_MS;
+    this.abortCallback = abortCallback ?? null;
   }
 
   // --- Store persistence helpers ---
@@ -58,15 +60,61 @@ export class RequestQueue {
       enqueuedAt: new Date(),
       position: this.queue.length + 1,
     };
-    this.queue.push(entry);
-    await this.persistPendingQueue();
 
-    logger.info('Request enqueued', { id: entry.id, position: entry.position, threadId: entry.threadId });
+    // Supersede: replace any pending entry for the same thread
+    const existingIdx = this.queue.findIndex(r => r.threadId === request.threadId);
+    if (existingIdx !== -1) {
+      logger.info('Superseding pending request for thread', {
+        oldId: this.queue[existingIdx].id,
+        newId: entry.id,
+        threadId: request.threadId,
+      });
+      entry.position = this.queue[existingIdx].position;
+      this.queue[existingIdx] = entry;
+    } else {
+      this.queue.push(entry);
+    }
+
+    // Interrupt: if active session is for the same thread, abort and front-load
+    let interrupted = false;
+    if (this.activeSession && this.activeSession.threadId === request.threadId && this.abortCallback) {
+      logger.info('Interrupting active session for thread', {
+        activeId: this.activeSession.id,
+        newId: entry.id,
+        threadId: request.threadId,
+      });
+
+      // If we didn't supersede a pending entry, we need to front-load the new entry
+      if (existingIdx === -1) {
+        // Move the new entry to position 1 (front of queue)
+        const idx = this.queue.indexOf(entry);
+        if (idx > 0) {
+          this.queue.splice(idx, 1);
+          this.queue.unshift(entry);
+          this.updatePositions();
+        }
+      }
+
+      interrupted = true;
+      await this.persistPendingQueue();
+
+      // Trigger abort AFTER the replacement is in the queue
+      // The abort will cause the onProcess callback to throw AbortError,
+      // which hits finally -> release(), then the polling loop picks up the replacement
+      this.abortCallback().catch(err => {
+        logger.error('Failed to abort active session', { error: err });
+      });
+    } else {
+      await this.persistPendingQueue();
+    }
+
+    logger.info('Request enqueued', { id: entry.id, position: entry.position, threadId: entry.threadId, interrupted });
 
     return {
       id: entry.id,
-      position: this.activeSession ? entry.position : 0,
-      estimatedWait: this.activeSession ? this.estimateWait(entry.position) : 0,
+      position: interrupted ? 0 : (this.activeSession ? entry.position : 0),
+      estimatedWait: interrupted ? 0 : (this.activeSession ? this.estimateWait(entry.position) : 0),
+      interrupted,
     };
   }
 
@@ -111,6 +159,10 @@ export class RequestQueue {
         waitTime: this.estimateWait(r.position),
       })),
     };
+  }
+
+  getActiveThreadId(): string | null {
+    return this.activeSession?.threadId ?? null;
   }
 
   onProcess(callback: (request: QueuedRequest) => Promise<void>): void {
