@@ -75,9 +75,9 @@ export class RequestQueue {
       this.queue.push(entry);
     }
 
-    // Interrupt: if active session is for the same thread, abort and front-load
+    // Interrupt: if active session is for the same thread AND interrupt was requested, abort and front-load
     let interrupted = false;
-    if (this.activeSession && this.activeSession.threadId === request.threadId && this.abortCallback) {
+    if (this.activeSession && this.activeSession.threadId === request.threadId && request.interrupt && this.abortCallback) {
       logger.info('Interrupting active session for thread', {
         activeId: this.activeSession.id,
         newId: entry.id,
