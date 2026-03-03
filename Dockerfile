@@ -43,8 +43,11 @@ RUN useradd -m -s /bin/bash bot \
   && mkdir -p /home/bot/go \
   && chown bot:bot /home/bot/go
 
+# Install Go development tools (linting + hot-reload)
 # Install oh-my-claudecode plugin as bot user
 USER bot
+RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.1.6 && \
+    go install github.com/air-verse/air@latest
 RUN claude plugin marketplace add https://github.com/Yeachan-Heo/oh-my-claudecode.git \
   && claude plugin install oh-my-claudecode@omc
 USER root
