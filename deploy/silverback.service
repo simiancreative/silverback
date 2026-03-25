@@ -4,12 +4,13 @@ After=network.target redis-server.service
 
 [Service]
 Type=simple
-User=sprite
-WorkingDirectory=/home/sprite/slack-claude-bot
+# Change to your deployment user
+User=slackbot
+WorkingDirectory=/opt/slack-claude-bot
 ExecStart=/usr/bin/node dist/index.js
 Restart=on-failure
 RestartSec=5
-EnvironmentFile=/home/sprite/slack-claude-bot/.env
+EnvironmentFile=/opt/slack-claude-bot/.env
 Environment=EXECUTOR=process
 Environment=MAX_CONCURRENT_SESSIONS=1
 Environment=REDIS_URL=redis://localhost:6379

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "=== Slack Claude Bot - Sprite VM Setup ==="
+echo "=== Slack Claude Bot - VM Setup ==="
 
 command -v node >/dev/null 2>&1 || { echo "ERROR: node not found"; exit 1; }
 command -v claude >/dev/null 2>&1 || { echo "ERROR: claude CLI not found"; exit 1; }
@@ -15,11 +15,14 @@ if [ ! -f "$CRED_FILE" ]; then
   exit 1
 fi
 
+APP_DIR="${APP_DIR:-/opt/slack-claude-bot}"
+DATA_DIR="${DATA_DIR:-/opt/slack-claude-bot-data}"
+
 # Configure git to use gh for auth
 git config --global credential.helper '!gh auth git-credential'
 
 echo "Building..."
-cd /home/sprite/slack-claude-bot
+cd "$APP_DIR"
 npm install
 npm run build
 
@@ -29,14 +32,14 @@ if [ ! -f .env ]; then
 fi
 
 # Create workspace directories
-mkdir -p /home/sprite/repos /home/sprite/workspaces
+mkdir -p "$DATA_DIR/repos" "$DATA_DIR/workspaces"
 
-sudo cp deploy/sprite/slack-claude-bot.service /etc/systemd/system/
+sudo cp "$APP_DIR/deploy/silverback.service" /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable slack-claude-bot
+sudo systemctl enable silverback
 
 echo ""
 echo "Setup complete. To start:"
 echo "  1. Edit .env with your Slack tokens"
-echo "  2. sudo systemctl start slack-claude-bot"
-echo "  3. sudo journalctl -u slack-claude-bot -f"
+echo "  2. sudo systemctl start silverback"
+echo "  3. sudo journalctl -u silverback -f"
