@@ -35,8 +35,8 @@ RUN ARCH=$(dpkg --print-architecture) && \
 ENV PATH="/usr/local/go/bin:/home/bot/go/bin:${PATH}"
 ENV GOPATH="/home/bot/go"
 
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code CLI and TypeScript
+RUN npm install -g @anthropic-ai/claude-code typescript
 
 # Create non-root user
 RUN useradd -m -s /bin/bash bot \

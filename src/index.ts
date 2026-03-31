@@ -3,6 +3,7 @@ import { createApp } from './bot/app';
 import { registerMentionHandler } from './bot/events/mention';
 import { registerMessageHandler } from './bot/events/message';
 import { registerChannelJoinHandler } from './bot/events/channel-join';
+import { registerReactionHandler } from './bot/events/reaction';
 import { CommandRegistry } from './bot/commands/registry';
 import { createClaudeHandler } from './bot/commands/claude';
 import { createDeployHandler } from './bot/commands/deploy';
@@ -121,11 +122,12 @@ async function main(): Promise<void> {
   registerMentionHandler(app, queue, botToken);
   registerMessageHandler(app, queue, sessionManager, botToken);
   registerChannelJoinHandler(app, workspaceManager, botUserId);
+  registerReactionHandler(app, sessionManager, threadPRManager, threadCompletionManager);
 
   // Register commands
   const registry = new CommandRegistry(app, workspaceManager);
   registry.registerHandler('sb-claude', createClaudeHandler(queue));
-  registry.registerHandler('sb-deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager, threadCompletionManager, botName));
+  registry.registerHandler('sb-deploy', createDeployHandler(threadPRManager, sessionManager, workspaceManager, botName));
   registry.registerHandler('sb-status', createStatusHandler(queue, auth, executor, workspaceManager));
   registry.registerHandler('sb-queue', createQueueHandler(queue));
   registry.registerHandler('sb-connect', createConnectHandler(workspaceManager));
