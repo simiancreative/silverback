@@ -1,6 +1,5 @@
 import { WebClient } from '@slack/web-api';
 import { ThreadPRManager } from '../../manager/thread-pr';
-import { ThreadCompletionManager } from '../../manager/thread-completion';
 import { SessionManager } from '../../orchestrator/session';
 import { WorkspaceManager } from '../../workspace/manager';
 import { BranchManager } from '../../git/branch';
@@ -16,7 +15,6 @@ export function createDeployHandler(
   threadPRManager: ThreadPRManager,
   sessionManager: SessionManager,
   workspaceManager: WorkspaceManager,
-  threadCompletionManager: ThreadCompletionManager,
   botName: string = 'silverback'
 ) {
   return async (command: any, client: WebClient): Promise<void> => {
@@ -148,8 +146,6 @@ export function createDeployHandler(
         text: `PR created: ${pr.url}\n\nBranch \`${branch}\` pushed to \`${session.repository}\`.`,
       });
 
-      // Mark thread as complete: add ✅ reaction and clean up resources
-      await threadCompletionManager.markComplete(client, channelId, threadTs);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Deploy failed', { threadTs, error });
