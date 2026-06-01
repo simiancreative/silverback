@@ -102,6 +102,25 @@ export class RepoCache {
     return workspacePath;
   }
 
+  /**
+   * Create (or reuse) a stable, empty per-thread workspace — no git clone.
+   * Used for threads with no connected repo so that Claude session `--resume`
+   * works across messages (Claude sessions are scoped to the working directory).
+   */
+  async createEmptyWorkspace(threadId: string): Promise<string> {
+    const workspacePath = path.join(this.workspaceBase, threadId);
+
+    // Path validation: prevent traversal
+    const resolvedWorkspace = path.resolve(workspacePath);
+    if (!resolvedWorkspace.startsWith(path.resolve(this.workspaceBase))) {
+      throw new Error('Path traversal detected in workspace path');
+    }
+
+    await fs.mkdir(workspacePath, { recursive: true });
+    logger.info('Empty workspace ready', { threadId, workspacePath });
+    return workspacePath;
+  }
+
   async cleanupWorkspace(threadId: string): Promise<void> {
     const workspacePath = path.join(this.workspaceBase, threadId);
     await fs.rm(workspacePath, { recursive: true, force: true });

@@ -1,5 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { WorkspaceManager } from '../manager';
+import type { RepoCache } from '../../repos/cache';
+import type { KeyValueStore } from '../../types';
+
+function makeStore(): KeyValueStore {
+  const data = new Map<string, unknown>();
+  return {
+    get: async <T>(k: string) => (data.get(k) ?? null) as T | null,
+    set: async (k: string, v: unknown) => { data.set(k, v); },
+    delete: async (k: string) => { data.delete(k); },
+  } as unknown as KeyValueStore;
+}
 
 describe('WorkspaceManager.parseRepoFromTopic', () => {
   it('parses github.com/org/repo', () => {
@@ -50,5 +61,25 @@ describe('WorkspaceManager.parseRepoFromTopic', () => {
   it('handles repo with dashes and underscores: github.com/org/my-repo_name', () => {
     const result = WorkspaceManager.parseRepoFromTopic('github.com/myorg/my-repo_name');
     expect(result).toEqual({ org: 'myorg', repo: 'my-repo_name' });
+  });
+});
+
+describe('WorkspaceManager.getOrCreateWorkspace (no repo connected)', () => {
+  it('returns a STABLE empty workspace (no clone) so --resume works across messages', async () => {
+    const store = makeStore();
+    const createEmptyWorkspace = vi.fn(async (t: string) => `/ws/${t}`);
+    const createWorkspace = vi.fn();
+    const repoCache = { createEmptyWorkspace, createWorkspace } as unknown as RepoCache;
+    const mgr = new WorkspaceManager(store, repoCache);
+
+    const first = await mgr.getOrCreateWorkspace('thread-1', 'chan-1');
+    expect(first).toBe('/ws/thread-1');
+    expect(createEmptyWorkspace).toHaveBeenCalledTimes(1);
+    expect(createWorkspace).not.toHaveBeenCalled();
+
+    // Second message in the same thread reuses the stored path — not a fresh dir.
+    const second = await mgr.getOrCreateWorkspace('thread-1', 'chan-1');
+    expect(second).toBe('/ws/thread-1');
+    expect(createEmptyWorkspace).toHaveBeenCalledTimes(1);
   });
 });

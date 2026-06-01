@@ -67,7 +67,15 @@ export class WorkspaceManager {
 
     // Get channel-repo mapping
     const mapping = await this.getChannelRepo(channelId);
-    if (!mapping) return null;
+    if (!mapping) {
+      // No repo connected — still give the thread a STABLE empty workspace so
+      // Claude session `--resume` works across messages (sessions are scoped to
+      // the working directory). Without this, each message gets a fresh temp dir
+      // and follow-up `--resume` fails with exit 1.
+      const workspacePath = await this.repoCache.createEmptyWorkspace(threadId);
+      await this.store.set(`workspace:${threadId}`, { workspacePath }, 7 * 24 * 60 * 60 * 1000);
+      return workspacePath;
+    }
 
     // Ensure bare cache is ready (with per-repo lock to prevent races)
     const cachePath = await this.ensureCachedWithLock(mapping.org, mapping.repo);
