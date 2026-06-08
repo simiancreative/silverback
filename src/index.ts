@@ -118,6 +118,16 @@ async function main(): Promise<void> {
     logger.warn('Missing files:read scope - text snippet input will not work. Add files:read to your Slack app OAuth scopes.');
   }
 
+  // Check for scopes needed by thread review feature
+  if (scopes.length > 0) {
+    if (!scopes.includes('channels:history') && !scopes.includes('groups:history')) {
+      logger.warn('Missing channels:history (or groups:history) scope - thread review will not work for public/private channels. Add channels:history and/or groups:history to your Slack app OAuth scopes.');
+    }
+    if (!scopes.includes('users:read')) {
+      logger.warn('Missing users:read scope - usernames will not resolve in thread review transcripts. Add users:read to your Slack app OAuth scopes.');
+    }
+  }
+
   // Register event handlers
   registerMentionHandler(app, queue, botToken);
   registerMessageHandler(app, queue, sessionManager, botToken);
