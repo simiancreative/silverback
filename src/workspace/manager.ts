@@ -1,7 +1,10 @@
+import * as path from 'path';
 import { KeyValueStore } from '../types';
 import { RepoCache } from '../repos/cache';
 import { BranchManager } from '../git/branch';
 import { Logger } from '../logging/logger';
+import { wrapMcpServers, writeSettingsLocal } from '../mcp-auth/wrap-config';
+import { generateToken } from '../mcp-auth/token';
 
 const logger = new Logger('workspace-manager');
 
@@ -81,6 +84,34 @@ export class WorkspaceManager {
     const cachePath = await this.ensureCachedWithLock(mapping.org, mapping.repo);
     const branch = BranchManager.generateBranchName(threadId);
     const workspacePath = await this.repoCache.createWorkspace(threadId, mapping.org, mapping.repo, branch, cachePath);
+
+    // Wrap MCP servers with auth if configured
+    const jwtSecret = process.env.MCP_JWT_SECRET;
+    if (jwtSecret) {
+      try {
+        const defaultTools = process.env.MCP_DEFAULT_TOOLS
+          ? process.env.MCP_DEFAULT_TOOLS.split(',')
+          : ['*'];
+        if (defaultTools.includes('*')) {
+          logger.warn('workspace token grants full tool access (MCP_DEFAULT_TOOLS contains *)');
+        }
+        const token = generateToken(jwtSecret, 'workspace', 'dev', defaultTools, 4 * 3600);
+        const proxyBinaryPath = path.resolve(__dirname, '../mcp-auth/index.js');
+        const settings = wrapMcpServers({
+          workspacePath,
+          proxyBinaryPath,
+          jwtSecret,
+          token,
+        });
+        if (settings) {
+          writeSettingsLocal(workspacePath, settings);
+          logger.info('MCP servers wrapped with auth proxy', { threadId });
+        }
+      } catch (err) {
+        logger.warn('Failed to wrap MCP servers with auth', { error: err, threadId });
+        // Non-fatal: workspace still usable without auth wrapping
+      }
+    }
 
     // Store workspace path
     await this.store.set(`workspace:${threadId}`, { workspacePath }, 7 * 24 * 60 * 60 * 1000); // 7 day TTL

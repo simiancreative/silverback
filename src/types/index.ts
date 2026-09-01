@@ -172,3 +172,48 @@ export interface TaskContext {
 // RecoveryContext is an alias for TaskContext
 export type RecoveryContext = TaskContext;
 
+// MCP Auth types (silverback-auth proxy)
+
+export interface McpAuthClaims {
+  sub: string;
+  env: string;
+  tools: string[];  // glob patterns: "*", "list_*", "raw_sql_query"
+  iat: number;
+  exp: number;
+}
+
+export interface McpProxyConfig {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export interface McpServerEntry {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export interface McpSettingsFile {
+  mcpServers: Record<string, McpServerEntry>;
+}
+
+export interface SilverbackAuthConfig {
+  servers: string[];  // MCP server names to wrap with auth
+}
+
+export interface JsonRpcMessage {
+  jsonrpc: string;
+  id?: number | string | null;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: JsonRpcError | null;
+}
+
+export interface JsonRpcError {
+  code: number;
+  message: string;
+  data?: unknown;
+}
+

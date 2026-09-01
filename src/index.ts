@@ -11,6 +11,7 @@ import { createStatusHandler } from './bot/commands/status';
 import { createQueueHandler } from './bot/commands/queue';
 import { createConnectHandler } from './bot/commands/connect';
 import { createOmcHandler, createOmcCancelHandler } from './bot/commands/omc';
+import { createMcpTokenHandler } from './bot/commands/mcp-token';
 
 import { RequestQueue } from './queue/request-queue';
 import { SessionManager } from './orchestrator/session';
@@ -141,6 +142,7 @@ async function main(): Promise<void> {
   registry.registerHandler('sb-status', createStatusHandler(queue, auth, executor, workspaceManager));
   registry.registerHandler('sb-queue', createQueueHandler(queue));
   registry.registerHandler('sb-connect', createConnectHandler(workspaceManager));
+  registry.registerHandler('sb-mcp-token', createMcpTokenHandler());
   // OMC mode handlers
   registry.registerHandler('sb-autopilot', createOmcHandler(queue, 'sb-autopilot', 'autopilot'));
   registry.registerHandler('sb-ralph', createOmcHandler(queue, 'sb-ralph', 'ralph'));
