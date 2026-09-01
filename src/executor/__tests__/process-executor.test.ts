@@ -61,36 +61,42 @@ describe('ProcessExecutor', () => {
   });
 
   it('spawns claude with correct default args', async () => {
-    const mockProc = createMockProcess();
-    mockSpawn.mockReturnValue(mockProc);
+    const savedClaudeModel = process.env.CLAUDE_MODEL;
+    delete process.env.CLAUDE_MODEL;
+    try {
+      const mockProc = createMockProcess();
+      mockSpawn.mockReturnValue(mockProc);
 
-    const executePromise = executor.execute(
-      { prompt: 'test prompt' },
-      () => {}
-    );
+      const executePromise = executor.execute(
+        { prompt: 'test prompt' },
+        () => {}
+      );
 
-    // Simulate successful completion
-    setImmediate(() => {
-      mockProc.emit('close', 0);
-    });
+      // Simulate successful completion
+      setImmediate(() => {
+        mockProc.emit('close', 0);
+      });
 
-    await executePromise;
+      await executePromise;
 
-    expect(mockSpawn).toHaveBeenCalledWith(
-      'claude',
-      [
-        '--print',
-        '--verbose',
-        '--output-format', 'stream-json',
-        '--dangerously-skip-permissions',
-        '--allowedTools', '*',
-        '--', 'test prompt'
-      ],
-      expect.objectContaining({
-        cwd: '/tmp/claude-work-test',
-        stdio: ['ignore', 'pipe', 'pipe']
-      })
-    );
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'claude',
+        [
+          '--print',
+          '--verbose',
+          '--output-format', 'stream-json',
+          '--dangerously-skip-permissions',
+          '--model', 'sonnet',
+          '--', 'test prompt'
+        ],
+        expect.objectContaining({
+          cwd: '/tmp/claude-work-test',
+          stdio: ['ignore', 'pipe', 'pipe']
+        })
+      );
+    } finally {
+      process.env.CLAUDE_MODEL = savedClaudeModel;
+    }
   });
 
   it('includes --resume when resumeSessionId provided', async () => {
@@ -240,12 +246,19 @@ describe('ProcessExecutor', () => {
   });
 
   it('healthCheck() returns false when credentials file missing', async () => {
-    mockExistsSync.mockReturnValue(false);
-
-    const result = await executor.healthCheck();
-
-    expect(result).toBe(false);
-    expect(mockExistsSync).toHaveBeenCalled();
+    const savedOauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    const savedApiKey = process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      mockExistsSync.mockReturnValue(false);
+      const result = await executor.healthCheck();
+      expect(result).toBe(false);
+      expect(mockExistsSync).toHaveBeenCalled();
+    } finally {
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = savedOauthToken;
+      process.env.ANTHROPIC_API_KEY = savedApiKey;
+    }
   });
 
   it('healthCheck() returns true when credentials exist and claude --version succeeds', async () => {
@@ -293,6 +306,6 @@ describe('ProcessExecutor', () => {
     const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
     expect(spawnArgs).not.toContain('--dangerously-skip-permissions');
     expect(spawnArgs).toContain('--print');
-    expect(spawnArgs).toContain('--allowedTools');
+    expect(spawnArgs).toContain('--model');
   });
 });
